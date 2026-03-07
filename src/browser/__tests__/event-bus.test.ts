@@ -68,6 +68,14 @@ describe('EventBus', () => {
     expect(smallBus.getHistory()).toHaveLength(3);
   });
 
+  it('unsubscribes from onAll', () => {
+    const handler = vi.fn();
+    const unsub = bus.onAll(handler);
+    unsub();
+    bus.emit({ type: 'tab:closed', tabId: 'x' });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('clears history', () => {
     bus.emit({ type: 'tab:closed', tabId: 'x' });
     bus.clearHistory();

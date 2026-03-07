@@ -13,9 +13,10 @@ let globalSequence = 0;
 
 export class HistoryManager {
   private readonly storage: JsonStorage<HistoryEntry[]>;
-  private readonly maxEntries = 10000;
+  private readonly maxEntries: number;
 
-  constructor(storageDir: string) {
+  constructor(storageDir: string, maxEntries: number = 10000) {
+    this.maxEntries = maxEntries;
     this.storage = new JsonStorage(join(storageDir, 'history.json'));
     const entries = this.load();
     const maxSeq = entries.reduce((max, e) => Math.max(max, e.sequence ?? 0), 0);

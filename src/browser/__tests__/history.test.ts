@@ -109,6 +109,16 @@ describe('HistoryManager', () => {
     });
   });
 
+  describe('maxEntries', () => {
+    it('trims entries when exceeding max', () => {
+      const smallHm = new HistoryManager(tempDir, 5);
+      for (let i = 0; i < 8; i++) {
+        smallHm.addVisit(`https://site${String(i)}.com`, `Site ${String(i)}`);
+      }
+      expect(smallHm.getRecent(100).length).toBeLessThanOrEqual(5);
+    });
+  });
+
   describe('persistence', () => {
     it('persists history across instances', () => {
       hm.addVisit('https://persist.com', 'Persist');

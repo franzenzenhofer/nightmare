@@ -69,6 +69,34 @@ describe('ApiServer', () => {
     expect(res.headers.get('access-control-allow-methods')).toContain('GET');
   });
 
+  it('handles malformed JSON body gracefully', async () => {
+    const res = await fetch(`http://localhost:${String(port)}/api/tabs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json{{{',
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('handles DELETE request (204 with null body)', async () => {
+    const createRes = await apiRequest('POST', '/api/tabs', { url: 'https://x.com' });
+    const tabId = (createRes.body as Record<string, unknown>).id;
+    const res = await fetch(`http://localhost:${String(port)}/api/tabs/${tabId as string}`, {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(204);
+  });
+
+  it('stop is safe to call without start', async () => {
+    const deps = {
+      tabManager: new (await import('../services/tab-manager')).TabManager(),
+      consoleCapture: new (await import('../api/console-capture')).ConsoleCapture(),
+      eventBus: new (await import('../api/event-bus')).EventBus(),
+    };
+    const freshServer = new ApiServer(deps);
+    await freshServer.stop();
+  });
+
   it('returns full state via GET /api/state', async () => {
     await apiRequest('POST', '/api/tabs', { url: 'https://x.com' });
     const { body } = await apiRequest('GET', '/api/state');

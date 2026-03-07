@@ -87,6 +87,45 @@ describe('API Handlers', () => {
     });
   });
 
+  describe('POST /api/tabs/:id/reload', () => {
+    it('reloads a tab', () => {
+      const tab = tabManager.createTab('https://x.com');
+      const result = router.handle('POST', `/api/tabs/${tab.id}/reload`);
+      expect(result?.status).toBe(200);
+    });
+
+    it('returns 404 for non-existent tab', () => {
+      const result = router.handle('POST', '/api/tabs/nope/reload');
+      expect(result?.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/tabs/:id/back', () => {
+    it('navigates back', () => {
+      const tab = tabManager.createTab('https://x.com');
+      const result = router.handle('POST', `/api/tabs/${tab.id}/back`);
+      expect(result?.status).toBe(200);
+    });
+
+    it('returns 404 for non-existent tab', () => {
+      const result = router.handle('POST', '/api/tabs/nope/back');
+      expect(result?.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/tabs/:id/forward', () => {
+    it('navigates forward', () => {
+      const tab = tabManager.createTab('https://x.com');
+      const result = router.handle('POST', `/api/tabs/${tab.id}/forward`);
+      expect(result?.status).toBe(200);
+    });
+
+    it('returns 404 for non-existent tab', () => {
+      const result = router.handle('POST', '/api/tabs/nope/forward');
+      expect(result?.status).toBe(404);
+    });
+  });
+
   describe('GET /api/tabs/:id/console', () => {
     it('returns console entries for tab', () => {
       consoleCapture.add('tab1', 'log', ['hello']);
@@ -95,6 +134,33 @@ describe('API Handlers', () => {
       const result = router.handle('GET', `/api/tabs/${tab.id}/console`);
       expect(result?.status).toBe(200);
       expect(result?.body).toHaveLength(1);
+    });
+  });
+
+  describe('POST /api/tabs (edge cases)', () => {
+    it('creates tab with no body at all', () => {
+      const result = router.handle('POST', '/api/tabs');
+      expect(result?.status).toBe(201);
+    });
+
+    it('creates tab with non-string url', () => {
+      const result = router.handle('POST', '/api/tabs', { url: 123 });
+      expect(result?.status).toBe(201);
+      expect((result?.body as Record<string, unknown>).url).toBe('nightmare://newtab');
+    });
+  });
+
+  describe('POST /api/tabs/:id/navigate (edge cases)', () => {
+    it('handles non-string url in body', () => {
+      const tab = tabManager.createTab();
+      const result = router.handle('POST', `/api/tabs/${tab.id}/navigate`, { url: 42 });
+      expect(result?.status).toBe(200);
+    });
+
+    it('handles missing body', () => {
+      const tab = tabManager.createTab();
+      const result = router.handle('POST', `/api/tabs/${tab.id}/navigate`);
+      expect(result?.status).toBe(200);
     });
   });
 

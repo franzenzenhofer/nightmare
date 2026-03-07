@@ -116,6 +116,14 @@ describe('BookmarkManager', () => {
     });
   });
 
+  describe('move (edge cases)', () => {
+    it('ignores move for non-existent bookmark', () => {
+      bm.add('A', 'https://a.com');
+      bm.move('nonexistent', null, 0);
+      expect(bm.getBarBookmarks()).toHaveLength(1);
+    });
+  });
+
   describe('persistence', () => {
     it('persists bookmarks across instances', () => {
       bm.add('Persisted', 'https://persisted.com');
