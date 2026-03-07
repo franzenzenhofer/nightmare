@@ -1,0 +1,32 @@
+{
+  "name": "nightmare-browser",
+  "version": "0.1.0",
+  "description": "AI-first web browser on NW.js — zero CORS, full Node.js, API-steerable, MCP-enabled",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nw src/ --devtools",
+    "dev:headless": "nw src/ --headless",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint 'src/**/*.ts' --max-warnings 0",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest watch",
+    "test:ui": "vitest --ui",
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "format": "prettier --write 'src/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts'"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^10.0.3",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {}
+}
