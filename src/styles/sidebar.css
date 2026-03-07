@@ -1,0 +1,81 @@
+#nm-sidebar {
+  display: none;
+  flex-direction: column;
+  width: 320px;
+  min-width: 280px;
+  max-width: 480px;
+  background: var(--nm-bg-secondary);
+  border-left: 1px solid var(--nm-tab-border);
+  overflow: hidden;
+}
+
+#nm-sidebar.open {
+  display: flex;
+}
+
+#nm-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--nm-space-2);
+  height: var(--nm-navbar-h);
+  padding: 0 var(--nm-space-3);
+  border-bottom: 1px solid var(--nm-tab-border);
+}
+
+#nm-sidebar-header .nm-sidebar-title {
+  flex: 1;
+  font-size: var(--nm-text-sm);
+  font-weight: 600;
+  color: var(--nm-text-primary);
+}
+
+#nm-sidebar-header .nm-sidebar-close {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none;
+  color: var(--nm-text-muted);
+  cursor: pointer;
+  border-radius: var(--nm-radius-sm);
+  font-size: 14px;
+}
+
+#nm-sidebar-header .nm-sidebar-close:hover {
+  background: var(--nm-bg-hover);
+  color: var(--nm-text-primary);
+}
+
+#nm-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--nm-space-3);
+}
+
+#nm-sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+#nm-sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#nm-sidebar-content::-webkit-scrollbar-thumb {
+  background: var(--nm-bg-hover);
+  border-radius: 3px;
+}
+
+#nm-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: var(--nm-bg-active);
+}
+
+#nm-sidebar-resize {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  z-index: 10;
+}
+
+#nm-sidebar-resize:hover {
+  background: var(--nm-accent-dim);
+}

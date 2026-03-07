@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>History - Nightmare Browser</title>
+  <link rel="stylesheet" href="../styles/tokens.css">
+  <style>
+    body {
+      margin: 0; min-height: 100vh;
+      background: var(--nm-bg-primary); color: var(--nm-text-primary);
+      font-family: var(--nm-font-ui); padding: 40px;
+    }
+    h1 {
+      font-size: 24px; font-weight: 600; margin-bottom: 24px;
+      color: var(--nm-accent);
+    }
+    .search-wrapper { max-width: 520px; margin-bottom: 24px; }
+    .search-input {
+      width: 100%; height: 36px; background: var(--nm-bg-input);
+      border: 1px solid var(--nm-tab-border);
+      border-radius: var(--nm-radius-full); padding: 0 16px;
+      font-family: var(--nm-font-url); font-size: var(--nm-text-base);
+      color: var(--nm-text-primary); outline: none;
+    }
+    .search-input:focus {
+      border-color: var(--nm-accent);
+      box-shadow: 0 0 0 1px var(--nm-accent-dim);
+    }
+    .history-list { max-width: 680px; list-style: none; }
+    .history-day {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      padding: 12px 0 6px; font-weight: 600;
+      border-bottom: 1px solid var(--nm-tab-border);
+      margin-bottom: 4px;
+    }
+    .history-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 12px; border-radius: var(--nm-radius-sm);
+      cursor: pointer;
+    }
+    .history-item:hover { background: var(--nm-bg-hover); }
+    .history-time {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      font-family: var(--nm-font-mono); flex-shrink: 0; width: 48px;
+    }
+    .history-title {
+      flex: 1; font-size: var(--nm-text-sm);
+      color: var(--nm-text-primary); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .history-url {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      font-family: var(--nm-font-mono); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 200px;
+    }
+    .empty {
+      color: var(--nm-text-muted); font-size: var(--nm-text-sm);
+      padding: 40px 0; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>History</h1>
+  <div class="search-wrapper">
+    <input class="search-input" type="text" placeholder="Search history..." autofocus>
+  </div>
+  <div class="history-list" id="history-list">
+    <div class="empty">No browsing history yet.</div>
+  </div>
+</body>
+</html>

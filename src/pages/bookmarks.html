@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmarks - Nightmare Browser</title>
+  <link rel="stylesheet" href="../styles/tokens.css">
+  <style>
+    body {
+      margin: 0; min-height: 100vh;
+      background: var(--nm-bg-primary); color: var(--nm-text-primary);
+      font-family: var(--nm-font-ui); padding: 40px;
+    }
+    h1 {
+      font-size: 24px; font-weight: 600; margin-bottom: 24px;
+      color: var(--nm-accent);
+    }
+    .toolbar {
+      display: flex; gap: 8px; margin-bottom: 24px;
+      max-width: 680px;
+    }
+    .toolbar .search-input {
+      flex: 1; height: 32px; background: var(--nm-bg-input);
+      border: 1px solid var(--nm-tab-border);
+      border-radius: var(--nm-radius-full); padding: 0 14px;
+      font-family: var(--nm-font-url); font-size: var(--nm-text-base);
+      color: var(--nm-text-primary); outline: none;
+    }
+    .toolbar .search-input:focus {
+      border-color: var(--nm-accent);
+      box-shadow: 0 0 0 1px var(--nm-accent-dim);
+    }
+    .tree { max-width: 680px; }
+    .tree-folder {
+      margin-bottom: 4px;
+    }
+    .tree-folder-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: var(--nm-radius-sm);
+      cursor: pointer; font-size: var(--nm-text-sm);
+      color: var(--nm-text-primary); font-weight: 500;
+    }
+    .tree-folder-header:hover { background: var(--nm-bg-hover); }
+    .tree-folder-header .folder-icon {
+      color: var(--nm-accent); font-size: 14px;
+    }
+    .tree-children { padding-left: 20px; }
+    .tree-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 10px; border-radius: var(--nm-radius-sm);
+      cursor: pointer; font-size: var(--nm-text-sm);
+      color: var(--nm-text-secondary);
+    }
+    .tree-item:hover {
+      background: var(--nm-bg-hover); color: var(--nm-text-primary);
+    }
+    .tree-item .item-favicon {
+      width: 14px; height: 14px; flex-shrink: 0;
+      background: var(--nm-bg-tertiary); border-radius: 2px;
+    }
+    .tree-item .item-url {
+      font-family: var(--nm-font-mono); font-size: var(--nm-text-xs);
+      color: var(--nm-text-muted); margin-left: auto;
+    }
+    .empty {
+      color: var(--nm-text-muted); font-size: var(--nm-text-sm);
+      padding: 40px 0; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bookmarks</h1>
+  <div class="toolbar">
+    <input class="search-input" type="text" placeholder="Search bookmarks..." autofocus>
+  </div>
+  <div class="tree" id="bookmarks-tree">
+    <div class="tree-folder">
+      <div class="tree-folder-header">
+        <span class="folder-icon">&#9660;</span> Bookmarks Bar
+      </div>
+      <div class="tree-children">
+        <div class="empty">No bookmarks yet.</div>
+      </div>
+    </div>
+    <div class="tree-folder">
+      <div class="tree-folder-header">
+        <span class="folder-icon">&#9654;</span> Other Bookmarks
+      </div>
+    </div>
+  </div>
+</body>
+</html>

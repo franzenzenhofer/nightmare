@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About - Nightmare Browser</title>
+  <link rel="stylesheet" href="../styles/tokens.css">
+  <style>
+    body {
+      margin: 0; min-height: 100vh;
+      background: var(--nm-bg-primary); color: var(--nm-text-primary);
+      font-family: var(--nm-font-ui);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .about-card {
+      text-align: center; max-width: 400px; padding: 40px;
+    }
+    .logo {
+      font-size: 36px; font-weight: 700; letter-spacing: -1.5px;
+      color: var(--nm-accent); margin-bottom: 8px;
+    }
+    .version {
+      font-size: var(--nm-text-sm); color: var(--nm-text-muted);
+      font-family: var(--nm-font-mono); margin-bottom: 24px;
+    }
+    .tagline {
+      font-size: 15px; color: var(--nm-text-secondary);
+      margin-bottom: 32px; line-height: 1.5;
+    }
+    .info-table {
+      width: 100%; border-collapse: collapse;
+      margin-bottom: 32px; text-align: left;
+    }
+    .info-table td {
+      padding: 8px 0; font-size: var(--nm-text-sm);
+      border-bottom: 1px solid var(--nm-tab-border);
+    }
+    .info-table td:first-child {
+      color: var(--nm-text-muted); width: 120px;
+    }
+    .info-table td:last-child {
+      color: var(--nm-text-primary);
+      font-family: var(--nm-font-mono);
+    }
+    .credits {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      line-height: 1.6;
+    }
+    .credits a {
+      color: var(--nm-accent); text-decoration: none;
+    }
+    .credits a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="about-card">
+    <div class="logo">NIGHTMARE</div>
+    <div class="version">v0.1.0</div>
+    <div class="tagline">AI-first browser built on NW.js</div>
+    <table class="info-table">
+      <tr>
+        <td>Runtime</td>
+        <td>NW.js</td>
+      </tr>
+      <tr>
+        <td>Node.js</td>
+        <td id="node-version">--</td>
+      </tr>
+      <tr>
+        <td>Chromium</td>
+        <td id="chromium-version">--</td>
+      </tr>
+      <tr>
+        <td>Platform</td>
+        <td id="platform">--</td>
+      </tr>
+    </table>
+    <div class="credits">
+      Built with NW.js and Chromium.<br>
+      Designed for developers and AI workflows.<br>
+      <a href="https://github.com/nicejsapp/nicejs">github.com/nicejsapp/nicejs</a>
+    </div>
+  </div>
+  <script>
+    try {
+      document.getElementById('node-version').textContent = process.version;
+      document.getElementById('chromium-version').textContent =
+        navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '--';
+      document.getElementById('platform').textContent =
+        process.platform + ' ' + process.arch;
+    } catch (e) {
+      /* Not running in NW.js context */
+    }
+  </script>
+</body>
+</html>

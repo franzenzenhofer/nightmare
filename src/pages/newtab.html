@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Tab</title>
+  <link rel="stylesheet" href="../styles/tokens.css">
+  <style>
+    body {
+      margin: 0; height: 100vh;
+      background: var(--nm-bg-primary); color: var(--nm-text-primary);
+      font-family: var(--nm-font-ui); display: flex;
+      flex-direction: column; align-items: center;
+      padding-top: 18vh;
+    }
+    .logo {
+      font-size: 48px; font-weight: 700; letter-spacing: -2px;
+      color: var(--nm-accent); margin-bottom: 32px;
+    }
+    .logo span { color: var(--nm-text-muted); font-weight: 300; }
+    .search-bar {
+      width: 560px; max-width: 90vw; height: 44px;
+      background: var(--nm-bg-input); border: 1px solid var(--nm-tab-border);
+      border-radius: var(--nm-radius-full); padding: 0 20px;
+      font-family: var(--nm-font-url); font-size: 15px;
+      color: var(--nm-text-primary); outline: none;
+    }
+    .search-bar:focus {
+      border-color: var(--nm-accent);
+      box-shadow: 0 0 0 2px var(--nm-accent-glow);
+    }
+    .section { width: 560px; max-width: 90vw; margin-top: 40px; }
+    .section-title {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      text-transform: uppercase; letter-spacing: 1.5px;
+      margin-bottom: 12px; font-weight: 600;
+    }
+    .grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    }
+    .tile {
+      height: 72px; background: var(--nm-bg-secondary);
+      border: 1px solid var(--nm-tab-border); border-radius: var(--nm-radius-md);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: var(--nm-text-secondary); font-size: var(--nm-text-xs);
+      cursor: pointer; transition: background 0.15s;
+    }
+    .tile:hover { background: var(--nm-bg-hover); color: var(--nm-text-primary); }
+    .tile-icon {
+      width: 24px; height: 24px; margin-bottom: 6px;
+      background: var(--nm-bg-tertiary); border-radius: var(--nm-radius-sm);
+    }
+  </style>
+</head>
+<body>
+  <div class="logo">NIGHTMARE<span>.browser</span></div>
+  <input class="search-bar" type="text" placeholder="Search or enter URL" autofocus>
+  <div class="section">
+    <div class="section-title">Most Visited</div>
+    <div class="grid" id="most-visited">
+      <div class="tile"><div class="tile-icon"></div>Site 1</div>
+      <div class="tile"><div class="tile-icon"></div>Site 2</div>
+      <div class="tile"><div class="tile-icon"></div>Site 3</div>
+      <div class="tile"><div class="tile-icon"></div>Site 4</div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title">Recently Bookmarked</div>
+    <div class="grid" id="recent-bookmarks">
+      <div class="tile"><div class="tile-icon"></div>Bookmark 1</div>
+      <div class="tile"><div class="tile-icon"></div>Bookmark 2</div>
+      <div class="tile"><div class="tile-icon"></div>Bookmark 3</div>
+      <div class="tile"><div class="tile-icon"></div>Bookmark 4</div>
+    </div>
+  </div>
+</body>
+</html>

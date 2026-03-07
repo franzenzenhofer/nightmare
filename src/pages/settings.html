@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - Nightmare Browser</title>
+  <link rel="stylesheet" href="../styles/tokens.css">
+  <style>
+    body {
+      margin: 0; min-height: 100vh;
+      background: var(--nm-bg-primary); color: var(--nm-text-primary);
+      font-family: var(--nm-font-ui); padding: 40px;
+    }
+    h1 {
+      font-size: 24px; font-weight: 600; margin-bottom: 32px;
+      color: var(--nm-accent);
+    }
+    .settings-group {
+      max-width: 520px; margin-bottom: 28px;
+      background: var(--nm-bg-secondary); border: 1px solid var(--nm-tab-border);
+      border-radius: var(--nm-radius-md); padding: 20px;
+    }
+    .settings-group h2 {
+      font-size: var(--nm-text-sm); color: var(--nm-text-muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 16px; font-weight: 600;
+    }
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    label {
+      display: block; font-size: var(--nm-text-sm);
+      color: var(--nm-text-secondary); margin-bottom: 6px;
+    }
+    input[type="text"], input[type="number"], select {
+      width: 100%; height: 32px; background: var(--nm-bg-input);
+      border: 1px solid var(--nm-tab-border); border-radius: var(--nm-radius-sm);
+      padding: 0 10px; font-family: var(--nm-font-mono);
+      font-size: var(--nm-text-base); color: var(--nm-text-primary);
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: var(--nm-accent);
+      box-shadow: 0 0 0 1px var(--nm-accent-dim);
+    }
+    select { cursor: pointer; }
+    select option { background: var(--nm-bg-secondary); }
+    .btn-save {
+      margin-top: 20px; padding: 8px 24px;
+      background: var(--nm-accent); color: #fff; border: none;
+      border-radius: var(--nm-radius-sm); font-size: var(--nm-text-base);
+      font-family: var(--nm-font-ui); cursor: pointer; font-weight: 500;
+    }
+    .btn-save:hover { background: #cf2f3c; }
+  </style>
+</head>
+<body>
+  <h1>Settings</h1>
+  <div class="settings-group">
+    <h2>General</h2>
+    <div class="field">
+      <label for="home-url">Home Page URL</label>
+      <input type="text" id="home-url" value="nightmare://newtab" placeholder="nightmare://newtab">
+    </div>
+    <div class="field">
+      <label for="search-engine">Search Engine</label>
+      <select id="search-engine">
+        <option value="google">Google</option>
+        <option value="duckduckgo">DuckDuckGo</option>
+        <option value="bing">Bing</option>
+      </select>
+    </div>
+  </div>
+  <div class="settings-group">
+    <h2>Appearance</h2>
+    <div class="field">
+      <label for="theme">Theme</label>
+      <select id="theme">
+        <option value="dark" selected>Dark</option>
+      </select>
+    </div>
+  </div>
+  <div class="settings-group">
+    <h2>Advanced</h2>
+    <div class="field">
+      <label for="api-port">API Port</label>
+      <input type="number" id="api-port" value="6660" min="1024" max="65535">
+    </div>
+  </div>
+  <button class="btn-save" id="save-btn">Save Settings</button>
+</body>
+</html>

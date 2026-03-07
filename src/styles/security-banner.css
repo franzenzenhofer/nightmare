@@ -1,0 +1,61 @@
+#nm-security-banner {
+  display: none;
+  align-items: center;
+  gap: var(--nm-space-2);
+  height: var(--nm-banner-h);
+  padding: 0 var(--nm-space-3);
+  font-size: var(--nm-text-xs);
+  font-family: var(--nm-font-mono);
+  border-bottom: 1px solid;
+}
+
+#nm-security-banner.visible {
+  display: flex;
+}
+
+#nm-security-banner.zone-local {
+  background: var(--nm-zone-local-bg);
+  color: var(--nm-zone-local-fg);
+  border-color: var(--nm-zone-local-border);
+}
+
+#nm-security-banner.zone-localhost {
+  background: var(--nm-zone-localhost-bg);
+  color: var(--nm-zone-localhost-fg);
+  border-color: var(--nm-zone-localhost-border);
+}
+
+#nm-security-banner.zone-web {
+  background: var(--nm-zone-web-bg);
+  color: var(--nm-zone-web-fg);
+  border-color: var(--nm-zone-web-border);
+}
+
+#nm-security-banner .nm-banner-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+#nm-security-banner .nm-banner-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#nm-security-banner .nm-banner-dismiss {
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  border-radius: var(--nm-radius-sm);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+#nm-security-banner .nm-banner-dismiss:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
