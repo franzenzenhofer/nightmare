@@ -42,8 +42,8 @@ export class Router {
       let isExactMatch = true;
 
       for (let i = 0; i < route.segments.length; i++) {
-        const routeSeg = route.segments[i]!;
-        const pathSeg = pathSegments[i]!;
+        const routeSeg = route.segments[i] ?? '';
+        const pathSeg = pathSegments[i] ?? '';
 
         if (routeSeg.startsWith(':')) {
           params[routeSeg.slice(1)] = pathSeg;

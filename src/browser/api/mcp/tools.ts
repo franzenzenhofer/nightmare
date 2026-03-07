@@ -27,7 +27,7 @@ export class McpToolRegistry {
     return [...this.tools.values()].map((t) => t.definition);
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<ReturnType<ToolHandler>> {
+  callTool(name: string, args: Record<string, unknown>): ReturnType<ToolHandler> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
     return tool.handler(args);

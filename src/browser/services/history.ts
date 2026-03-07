@@ -19,7 +19,7 @@ export class HistoryManager {
     this.maxEntries = maxEntries;
     this.storage = new JsonStorage(join(storageDir, 'history.json'));
     const entries = this.load();
-    const maxSeq = entries.reduce((max, e) => Math.max(max, e.sequence ?? 0), 0);
+    const maxSeq = entries.reduce((max, e) => Math.max(max, e.sequence), 0);
     if (maxSeq > globalSequence) {
       globalSequence = maxSeq;
     }
