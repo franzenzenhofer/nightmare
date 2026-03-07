@@ -18,6 +18,10 @@ function getStringParam(obj: Record<string, unknown>, key: string): string {
   return typeof val === 'string' ? val : '';
 }
 
+export function param(params: Record<string, string>, key: string): string {
+  return params[key] ?? '';
+}
+
 export function createApiRouter(deps: ApiDependencies): Router {
   const router = new Router();
   const { tabManager, consoleCapture, eventBus } = deps;
@@ -38,20 +42,20 @@ export function createApiRouter(deps: ApiDependencies): Router {
   });
 
   router.get('/api/tabs/:id', (params) => {
-    const tab = tabManager.getTab(params.id ?? '');
+    const tab = tabManager.getTab(param(params, 'id'));
     if (!tab) return { status: 404, body: { error: 'Tab not found' } };
     return { status: 200, body: tab };
   });
 
   router.delete('/api/tabs/:id', (params) => {
-    const id = params.id ?? '';
+    const id = param(params, 'id');
     tabManager.closeTab(id);
     eventBus.emit({ type: 'tab:closed', tabId: id });
     return { status: 204, body: null };
   });
 
   router.post('/api/tabs/:id/navigate', (params, body) => {
-    const tab = tabManager.getTab(params.id ?? '');
+    const tab = tabManager.getTab(param(params, 'id'));
     if (!tab) return { status: 404, body: { error: 'Tab not found' } };
     const reqBody = getBody(body);
     const url = getStringParam(reqBody, 'url');
@@ -61,25 +65,25 @@ export function createApiRouter(deps: ApiDependencies): Router {
   });
 
   router.post('/api/tabs/:id/reload', (params) => {
-    const tab = tabManager.getTab(params.id ?? '');
+    const tab = tabManager.getTab(param(params, 'id'));
     if (!tab) return { status: 404, body: { error: 'Tab not found' } };
     return { status: 200, body: { reloading: true } };
   });
 
   router.post('/api/tabs/:id/back', (params) => {
-    const tab = tabManager.getTab(params.id ?? '');
+    const tab = tabManager.getTab(param(params, 'id'));
     if (!tab) return { status: 404, body: { error: 'Tab not found' } };
     return { status: 200, body: { navigating: 'back' } };
   });
 
   router.post('/api/tabs/:id/forward', (params) => {
-    const tab = tabManager.getTab(params.id ?? '');
+    const tab = tabManager.getTab(param(params, 'id'));
     if (!tab) return { status: 404, body: { error: 'Tab not found' } };
     return { status: 200, body: { navigating: 'forward' } };
   });
 
   router.get('/api/tabs/:id/console', (params) => {
-    const entries = consoleCapture.getEntries(params.id ?? '');
+    const entries = consoleCapture.getEntries(param(params, 'id'));
     return { status: 200, body: entries };
   });
 

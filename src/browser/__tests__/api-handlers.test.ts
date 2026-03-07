@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createApiRouter } from '../api/handlers';
+import { createApiRouter, param } from '../api/handlers';
 import { TabManager } from '../services/tab-manager';
 import { ConsoleCapture } from '../api/console-capture';
 import { EventBus } from '../api/event-bus';
@@ -161,6 +161,16 @@ describe('API Handlers', () => {
       const tab = tabManager.createTab();
       const result = router.handle('POST', `/api/tabs/${tab.id}/navigate`);
       expect(result?.status).toBe(200);
+    });
+  });
+
+  describe('param helper', () => {
+    it('returns param value when present', () => {
+      expect(param({ id: 'abc' }, 'id')).toBe('abc');
+    });
+
+    it('returns empty string when param missing', () => {
+      expect(param({}, 'id')).toBe('');
     });
   });
 

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nightmare</title>
+  <link rel="stylesheet" href="../styles/nightmare.css">
+  <link rel="stylesheet" href="../styles/tab-bar.css">
+  <link rel="stylesheet" href="../styles/nav-bar.css">
+  <link rel="stylesheet" href="../styles/security-banner.css">
+  <link rel="stylesheet" href="../styles/sidebar.css">
+</head>
+<body>
+  <div id="nm-browser">
+    <div id="nm-titlebar">
+      <span class="nm-title">Nightmare</span>
+      <div class="nm-window-controls">
+        <button id="nm-btn-minimize" title="Minimize">&#x2013;</button>
+        <button id="nm-btn-maximize" title="Maximize">&#x25A1;</button>
+        <button id="nm-btn-close" title="Close">&#x2715;</button>
+      </div>
+    </div>
+
+    <div id="nm-tab-bar">
+      <button id="nm-new-tab" class="nm-new-tab-btn" title="New Tab">+</button>
+    </div>
+
+    <div id="nm-nav-bar">
+      <button id="nm-btn-back" title="Back" disabled>&#x2190;</button>
+      <button id="nm-btn-forward" title="Forward" disabled>&#x2192;</button>
+      <button id="nm-btn-reload" title="Reload">&#x21BB;</button>
+      <button id="nm-btn-home" title="Home">&#x2302;</button>
+      <div class="nm-url-zone-dot"></div>
+      <input id="nm-url-input" class="nm-url-bar" type="text"
+             placeholder="Search or enter URL..." spellcheck="false">
+      <button id="nm-btn-bookmark" title="Bookmark this page">&#x2606;</button>
+    </div>
+
+    <div id="nm-bookmarks-bar"></div>
+
+    <div id="nm-security-banner" class="nm-security-banner" style="display:none"></div>
+
+    <div id="nm-content-area"></div>
+
+    <div id="nm-status-bar">
+      <span id="nm-status-zone">Ready</span>
+      <span id="nm-status-tabs">0 tabs</span>
+    </div>
+  </div>
+</body>
+</html>

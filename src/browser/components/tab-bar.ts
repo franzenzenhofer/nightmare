@@ -16,9 +16,7 @@ export function reorder(
   if (sourceIndex === -1) return [...tabs];
 
   const result = [...tabs];
-  const [moved] = result.splice(sourceIndex, 1);
-  if (!moved) return [...tabs];
-
+  const moved = result.splice(sourceIndex, 1)[0] as Tab;
   const clamped = Math.max(0, Math.min(newIndex, result.length));
   result.splice(clamped, 0, moved);
   return result;
