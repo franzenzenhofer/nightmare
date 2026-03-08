@@ -4,6 +4,8 @@
 
 **You are on your own. Do NOT ask the user any questions.** Answer all your own questions. Make all decisions yourself. Choose the best path and execute. Continue until the project is 100% done and the golden goal is reached. The user is away — treat every decision as yours to make.
 
+**NEVER STOP. NEVER WAIT. FINISH ALL TASKS.** Do not pause for confirmation. Do not ask "shall I continue?" Execute every task in the backlog until the GOLDEN GOAL is reached. Push to GitHub after every milestone. The user is in bed — when they wake up, everything must be done.
+
 ---
 
 ## Golden Goal
