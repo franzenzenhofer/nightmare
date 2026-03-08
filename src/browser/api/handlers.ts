@@ -1,104 +1,62 @@
 import { Router } from './router';
-import type { TabManager } from '../services/tab-manager';
-import type { ConsoleCapture } from './console-capture';
-import type { EventBus } from './event-bus';
-
-interface ApiDependencies {
-  readonly tabManager: TabManager;
-  readonly consoleCapture: ConsoleCapture;
-  readonly eventBus: EventBus;
-}
+import { RouteRegistry } from './route-registry';
+import type { RouteDefinition } from './route-registry';
+import { registerAllRoutes } from './route-definitions';
+import type { RouteDependencies } from './route-definitions';
 
 function getBody(body: unknown): Record<string, unknown> {
-  return (body !== null && body !== undefined ? body : {}) as Record<string, unknown>;
+  if (body !== null && body !== undefined) {
+    return body as Record<string, unknown>;
+  }
+  return {};
 }
 
-function getStringParam(obj: Record<string, unknown>, key: string): string {
-  const val = obj[key];
-  return typeof val === 'string' ? val : '';
-}
-
-export function param(params: Record<string, string>, key: string): string {
+export function param(
+  params: Record<string, string>,
+  key: string,
+): string {
   return params[key] ?? '';
 }
 
-export function createApiRouter(deps: ApiDependencies): Router {
-  const router = new Router();
-  const { tabManager, consoleCapture, eventBus } = deps;
-
-  router.post('/api/tabs', (_params, body) => {
-    const reqBody = getBody(body);
-    const url = typeof reqBody.url === 'string' ? reqBody.url : undefined;
-    const tab = tabManager.createTab(url);
-    eventBus.emit({
-      type: 'tab:created',
-      tab: { id: tab.id, url: tab.url, title: tab.title, zone: tab.zone },
+function addToRouter(router: Router, def: RouteDefinition): void {
+  const wrapped = (
+    params: Record<string, string>,
+    body: unknown,
+  ): ReturnType<typeof def.handler> => {
+    return def.handler({
+      pathParams: params,
+      body: getBody(body),
     });
-    return { status: 201, body: tab };
-  });
+  };
 
-  router.get('/api/tabs', () => {
-    return { status: 200, body: tabManager.getAllTabs() };
-  });
+  switch (def.method) {
+    case 'GET':
+      router.get(def.path, wrapped);
+      break;
+    case 'POST':
+      router.post(def.path, wrapped);
+      break;
+    case 'DELETE':
+      router.delete(def.path, wrapped);
+      break;
+  }
+}
 
-  router.get('/api/tabs/:id', (params) => {
-    const tab = tabManager.getTab(param(params, 'id'));
-    if (!tab) return { status: 404, body: { error: 'Tab not found' } };
-    return { status: 200, body: tab };
-  });
+export function createRouteRegistry(
+  deps: RouteDependencies,
+): RouteRegistry {
+  const registry = new RouteRegistry();
+  registerAllRoutes(registry, deps);
+  return registry;
+}
 
-  router.delete('/api/tabs/:id', (params) => {
-    const id = param(params, 'id');
-    tabManager.closeTab(id);
-    eventBus.emit({ type: 'tab:closed', tabId: id });
-    return { status: 204, body: null };
-  });
+export function createApiRouter(deps: RouteDependencies): Router {
+  const registry = createRouteRegistry(deps);
+  const router = new Router();
 
-  router.post('/api/tabs/:id/navigate', (params, body) => {
-    const tab = tabManager.getTab(param(params, 'id'));
-    if (!tab) return { status: 404, body: { error: 'Tab not found' } };
-    const reqBody = getBody(body);
-    const url = getStringParam(reqBody, 'url');
-    tabManager.updateTabFromWebview(tab.id, { url });
-    eventBus.emit({ type: 'tab:navigated', tabId: tab.id, url });
-    return { status: 200, body: tabManager.getTab(tab.id) };
-  });
-
-  router.post('/api/tabs/:id/reload', (params) => {
-    const tab = tabManager.getTab(param(params, 'id'));
-    if (!tab) return { status: 404, body: { error: 'Tab not found' } };
-    return { status: 200, body: { reloading: true } };
-  });
-
-  router.post('/api/tabs/:id/back', (params) => {
-    const tab = tabManager.getTab(param(params, 'id'));
-    if (!tab) return { status: 404, body: { error: 'Tab not found' } };
-    return { status: 200, body: { navigating: 'back' } };
-  });
-
-  router.post('/api/tabs/:id/forward', (params) => {
-    const tab = tabManager.getTab(param(params, 'id'));
-    if (!tab) return { status: 404, body: { error: 'Tab not found' } };
-    return { status: 200, body: { navigating: 'forward' } };
-  });
-
-  router.get('/api/tabs/:id/console', (params) => {
-    const entries = consoleCapture.getEntries(param(params, 'id'));
-    return { status: 200, body: entries };
-  });
-
-  router.get('/api/state', () => {
-    const tabs = tabManager.getAllTabs();
-    const activeTab = tabManager.getActiveTab();
-    return {
-      status: 200,
-      body: {
-        tabs,
-        activeTabId: activeTab?.id ?? null,
-        tabCount: tabManager.getTabCount(),
-      },
-    };
-  });
+  for (const def of registry.getDefinitions()) {
+    addToRouter(router, def);
+  }
 
   return router;
 }

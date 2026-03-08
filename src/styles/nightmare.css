@@ -17,12 +17,15 @@ html, body {
   display: flex; flex-direction: column;
   height: 100vh; width: 100vw;
   border: 1px solid #1a1d2e;
+  overflow: hidden;
 }
 
 /* ---- Titlebar ---- */
 #nm-titlebar {
   display: flex; align-items: center;
   height: var(--nm-titlebar-h);
+  min-height: var(--nm-titlebar-h);
+  flex-shrink: 0;
   background: var(--nm-bg-primary);
   -webkit-app-region: drag;
   padding: 0 var(--nm-space-2);
@@ -36,10 +39,14 @@ html, body {
   letter-spacing: 2px;
   text-shadow: 0 0 8px rgba(230, 57, 70, 0.3);
   font-family: var(--nm-font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 12px;
 }
 
 #nm-titlebar .nm-window-controls {
-  display: flex; gap: 2px;
+  display: flex; gap: 2px; flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
 
@@ -66,6 +73,8 @@ html, body {
 #nm-tab-bar {
   display: flex; align-items: stretch;
   height: var(--nm-tabbar-h);
+  min-height: var(--nm-tabbar-h);
+  flex-shrink: 0;
   background: var(--nm-tab-bg);
   overflow-x: auto; overflow-y: hidden;
   border-bottom: 1px solid var(--nm-tab-border);
@@ -76,13 +85,15 @@ html, body {
   display: flex; align-items: center;
   gap: var(--nm-space-2);
   height: var(--nm-navbar-h);
+  min-height: var(--nm-navbar-h);
+  flex-shrink: 0;
   padding: 0 var(--nm-space-3);
   background: var(--nm-bg-secondary);
   border-bottom: 1px solid var(--nm-tab-border);
 }
 
 #nm-nav-bar button {
-  width: 28px; height: 28px;
+  width: 28px; height: 28px; flex-shrink: 0;
   background: none; border: none;
   color: var(--nm-text-secondary);
   cursor: pointer; border-radius: var(--nm-radius-sm);
@@ -100,6 +111,7 @@ html, body {
 /* ---- URL bar ---- */
 .nm-url-bar {
   flex: 1; height: 28px;
+  min-width: 0;
   background: var(--nm-bg-input);
   border: 1px solid var(--nm-tab-border);
   border-radius: var(--nm-radius-full);
@@ -129,12 +141,15 @@ html, body {
   display: flex; align-items: center;
   gap: var(--nm-space-1);
   height: var(--nm-bookmarkbar-h);
+  min-height: var(--nm-bookmarkbar-h);
+  flex-shrink: 0;
   padding: 0 var(--nm-space-3);
   background: var(--nm-bg-secondary);
   border-bottom: 1px solid var(--nm-tab-border);
   font-size: var(--nm-text-xs);
   overflow: hidden;
   font-family: var(--nm-font-mono);
+  white-space: nowrap;
 }
 
 #nm-bookmarks-bar a, #nm-bookmarks-bar .nm-bookmark {
@@ -158,22 +173,27 @@ html, body {
 #nm-content-area {
   flex: 1; position: relative;
   overflow: hidden;
+  min-height: 0;
 }
 
-#nm-content-area webview {
+#nm-content-area iframe, #nm-content-area webview {
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
+  border: none;
   display: none;
+  background: var(--nm-bg-primary);
 }
 
-#nm-content-area webview.active { display: block; }
+#nm-content-area iframe.active, #nm-content-area webview.active { display: block; }
 
 /* ---- Status bar ---- */
 #nm-status-bar {
   display: flex; align-items: center;
   gap: var(--nm-space-3);
   height: var(--nm-statusbar-h);
+  min-height: var(--nm-statusbar-h);
+  flex-shrink: 0;
   padding: 0 var(--nm-space-3);
   background: var(--nm-bg-primary);
   border-top: 1px solid var(--nm-tab-border);

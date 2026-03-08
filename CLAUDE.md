@@ -502,6 +502,44 @@ The security zone system is the heart of Nightmare. It MUST be:
 
 ---
 
+## Code Quality Commandments
+
+### TDD-First — Red to Green, No Exceptions
+
+**Every function starts as a failing test. No implementation code without a RED test first.**
+
+```
+1. RED    — Write a test for the behavior. Run it. It MUST fail.
+2. GREEN  — Write MINIMUM code to pass. Nothing extra.
+3. REFACTOR — DRY it up. Tests stay green.
+4. REPEAT — Next behavior, next test.
+```
+
+**A function without a test is a MAJOR HIGH-PRIORITY BUG.** Every public function, every pure function, every handler, every utility — if it exists, it has a test. If it doesn't have a test, drop everything and write one. No excuses. No "I'll test it later." Later is now.
+
+### DRY to the Absolute Maximum
+
+**Code duplication is a MAJOR BUG.** Not a style issue. Not a suggestion. A BUG that must be fixed immediately.
+
+- If the same logic appears twice, extract it into a shared module.
+- Helper functions belong in shared files, imported everywhere.
+- Types and interfaces: define ONCE, re-export from canonical location.
+- No copy-paste of utility functions between files. Ever.
+- When you see duplication: STOP. Fix it. Then continue.
+- Circular dependency is not an excuse for duplication — restructure imports.
+
+### Super Modular Architecture
+
+- **Every file: one responsibility.** If a file does two things, split it.
+- **Max 150 lines per file.** If longer, extract a module.
+- **Max 30 lines per function.** If longer, decompose.
+- **Pure functions everywhere.** Side effects only at system boundaries.
+- **Clean code to the maximum.** Descriptive names. No abbreviations. No cleverness.
+- **Composition over inheritance.** Small focused modules composed together.
+- **Linter is hardcore.** ESLint flags everything, zero warnings allowed. Auto-fix (`bun run lint:fix`) can be used by the AI or the user when it makes sense — but the background linter/LSP must NOT auto-fix on save.
+
+---
+
 ## Hard UI/Design Rules
 
 - **No external fonts. EVER.** Use only system fonts and monospace stacks (`'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace`). No Google Fonts, no CDN fonts, no font downloads. All fonts must be locally available or fallback to system defaults.

@@ -1,3 +1,7 @@
+import { RouteRegistry } from '../route-registry';
+import { extractPathParamNames } from '../route-registry';
+import { registerAllRoutes } from '../route-definitions';
+import type { RouteDefinition } from '../route-registry';
 import type { TabManager } from '../../services/tab-manager';
 import type { ConsoleCapture } from '../console-capture';
 import type { EventBus } from '../event-bus';
@@ -16,143 +20,68 @@ interface McpDependencies {
 
 type ToolHandler = (args: Record<string, unknown>) => unknown;
 
-export class McpToolRegistry {
-  private readonly tools = new Map<string, { definition: McpToolDefinition; handler: ToolHandler }>();
+function mcpHandlerFromRoute(
+  def: RouteDefinition,
+): ToolHandler {
+  const paramNames = extractPathParamNames(def.path);
 
-  constructor(private readonly deps: McpDependencies) {
-    this.registerTools();
+  return (args: Record<string, unknown>): unknown => {
+    const pathParams: Record<string, string> = {};
+    const body: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(args)) {
+      if (paramNames.includes(key)) {
+        pathParams[key] = String(value);
+      } else {
+        body[key] = value;
+      }
+    }
+
+    if ('tabId' in args && paramNames.includes('id')) {
+      pathParams.id = String(args.tabId);
+    }
+
+    const result = def.handler({ pathParams, body });
+
+    if (result.status === 404) {
+      throw new Error('Tab not found');
+    }
+
+    return result.body;
+  };
+}
+
+export class McpToolRegistry {
+  private readonly tools = new Map<
+    string,
+    { definition: McpToolDefinition; handler: ToolHandler }
+  >();
+
+  constructor(deps: McpDependencies) {
+    const registry = new RouteRegistry();
+    registerAllRoutes(registry, deps);
+
+    for (const def of registry.getDefinitions()) {
+      const definition: McpToolDefinition = {
+        name: def.mcpName,
+        description: def.description,
+        inputSchema: def.inputSchema,
+      };
+      const handler = mcpHandlerFromRoute(def);
+      this.tools.set(def.mcpName, { definition, handler });
+    }
   }
 
   listTools(): McpToolDefinition[] {
     return [...this.tools.values()].map((t) => t.definition);
   }
 
-  callTool(name: string, args: Record<string, unknown>): ReturnType<ToolHandler> {
+  callTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): ReturnType<ToolHandler> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
     return tool.handler(args);
-  }
-
-  private registerTools(): void {
-    this.register({
-      name: 'nightmare_create_tab',
-      description: 'Open a new tab with optional URL',
-      inputSchema: { type: 'object', properties: { url: { type: 'string' } } },
-      handler: (args) => {
-        const url = typeof args.url === 'string' ? args.url : undefined;
-        const tab = this.deps.tabManager.createTab(url);
-        this.deps.eventBus.emit({
-          type: 'tab:created',
-          tab: { id: tab.id, url: tab.url, title: tab.title, zone: tab.zone },
-        });
-        return tab;
-      },
-    });
-
-    this.register({
-      name: 'nightmare_list_tabs',
-      description: 'List all open tabs with state',
-      inputSchema: { type: 'object', properties: {} },
-      handler: () => this.deps.tabManager.getAllTabs(),
-    });
-
-    this.register({
-      name: 'nightmare_get_tab',
-      description: 'Get full tab state by ID',
-      inputSchema: { type: 'object', properties: { tabId: { type: 'string' } }, required: ['tabId'] },
-      handler: (args) => {
-        const tab = this.deps.tabManager.getTab(args.tabId as string);
-        if (!tab) throw new Error('Tab not found');
-        return tab;
-      },
-    });
-
-    this.register({
-      name: 'nightmare_close_tab',
-      description: 'Close a tab by ID',
-      inputSchema: { type: 'object', properties: { tabId: { type: 'string' } }, required: ['tabId'] },
-      handler: (args) => {
-        this.deps.tabManager.closeTab(args.tabId as string);
-        this.deps.eventBus.emit({ type: 'tab:closed', tabId: args.tabId as string });
-        return { closed: true };
-      },
-    });
-
-    this.register({
-      name: 'nightmare_navigate',
-      description: 'Navigate a tab to a URL',
-      inputSchema: {
-        type: 'object',
-        properties: { tabId: { type: 'string' }, url: { type: 'string' } },
-        required: ['tabId', 'url'],
-      },
-      handler: (args) => {
-        const tab = this.deps.tabManager.getTab(args.tabId as string);
-        if (!tab) throw new Error('Tab not found');
-        this.deps.tabManager.updateTabFromWebview(tab.id, { url: args.url as string });
-        this.deps.eventBus.emit({ type: 'tab:navigated', tabId: tab.id, url: args.url as string });
-        return this.deps.tabManager.getTab(tab.id);
-      },
-    });
-
-    this.register({
-      name: 'nightmare_go_back',
-      description: 'Navigate back in tab history',
-      inputSchema: { type: 'object', properties: { tabId: { type: 'string' } }, required: ['tabId'] },
-      handler: (args) => {
-        const tab = this.deps.tabManager.getTab(args.tabId as string);
-        if (!tab) throw new Error('Tab not found');
-        return { navigating: 'back' };
-      },
-    });
-
-    this.register({
-      name: 'nightmare_go_forward',
-      description: 'Navigate forward in tab history',
-      inputSchema: { type: 'object', properties: { tabId: { type: 'string' } }, required: ['tabId'] },
-      handler: (args) => {
-        const tab = this.deps.tabManager.getTab(args.tabId as string);
-        if (!tab) throw new Error('Tab not found');
-        return { navigating: 'forward' };
-      },
-    });
-
-    this.register({
-      name: 'nightmare_reload',
-      description: 'Reload a tab',
-      inputSchema: { type: 'object', properties: { tabId: { type: 'string' } }, required: ['tabId'] },
-      handler: (args) => {
-        const tab = this.deps.tabManager.getTab(args.tabId as string);
-        if (!tab) throw new Error('Tab not found');
-        return { reloading: true };
-      },
-    });
-
-    this.register({
-      name: 'nightmare_get_console',
-      description: 'Read console log buffer for a tab',
-      inputSchema: { type: 'object', properties: { tabId: { type: 'string' } }, required: ['tabId'] },
-      handler: (args) => this.deps.consoleCapture.getEntries(args.tabId as string),
-    });
-
-    this.register({
-      name: 'nightmare_get_state',
-      description: 'Full browser state snapshot',
-      inputSchema: { type: 'object', properties: {} },
-      handler: () => {
-        const tabs = this.deps.tabManager.getAllTabs();
-        const activeTab = this.deps.tabManager.getActiveTab();
-        return {
-          tabs,
-          activeTabId: activeTab?.id ?? null,
-          tabCount: this.deps.tabManager.getTabCount(),
-        };
-      },
-    });
-  }
-
-  private register(config: McpToolDefinition & { handler: ToolHandler }): void {
-    const { handler, ...definition } = config;
-    this.tools.set(config.name, { definition, handler });
   }
 }
