@@ -6,12 +6,9 @@ import { EventBus } from '../api/event-bus';
 
 let registry: McpToolRegistry;
 let tabManager: TabManager;
-
 beforeEach(() => {
   tabManager = new TabManager();
-  const consoleCapture = new ConsoleCapture();
-  const eventBus = new EventBus();
-  registry = new McpToolRegistry({ tabManager, consoleCapture, eventBus });
+  registry = new McpToolRegistry({ tabManager, consoleCapture: new ConsoleCapture(), eventBus: new EventBus() });
 });
 
 describe('Extended MCP Tools', () => {
