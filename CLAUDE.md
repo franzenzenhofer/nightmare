@@ -502,11 +502,49 @@ The security zone system is the heart of Nightmare. It MUST be:
 
 ---
 
+## Hard UI/Design Rules
+
+- **No external fonts. EVER.** Use only system fonts and monospace stacks (`'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace`). No Google Fonts, no CDN fonts, no font downloads. All fonts must be locally available or fallback to system defaults.
+- **Nightmare theme everywhere.** All UI, internal pages, demo apps, and error messages use the nightmare aesthetic: dark backgrounds (#050508), neon accent colors, scanline overlays, monospace fonts, uppercase labels, glitch effects. No generic Bootstrap/Material look.
+- **98% GUI + function test coverage** — hard goal. Every button, input, panel, tab, toolbar element must have unit tests via the API. Every public function must be tested. Coverage below 98% is a blocker.
+
+## MCP Auto-Enable
+
+The MCP server MUST automatically expose ALL REST API endpoints as MCP tools. When a new REST endpoint is added, it MUST be auto-registered as an MCP tool — no manual mapping required.
+
+**Auto-sync mechanism:**
+- MCP tool definitions are generated FROM the REST API router/handler registry
+- Adding a new `POST /api/tabs/:id/navigate` handler automatically creates `nightmare_navigate` MCP tool
+- The MCP tool list is always a 1:1 mirror of the REST API
+- A single source of truth: the route handler defines the schema, MCP reads it
+- Zero drift between REST and MCP — guaranteed by code, not convention
+
+## DevTools Auto-Open
+
+In development mode (`bun run dev`), NW.js DevTools MUST open automatically on launch. This is non-negotiable for debugging:
+
+```jsonc
+// src/package.json — dev mode
+{
+  "window": {
+    "toolbar": true  // Shows address bar + DevTools button
+  }
+}
+```
+
+The `dev` script already uses `--devtools` flag: `nw src/ --devtools`. Ensure:
+- DevTools opens automatically in a separate window on launch
+- DevTools is NEVER auto-opened in headless mode
+- The DevTools window position is remembered between sessions
+- Console output from all iframes is visible in DevTools
+
+---
+
 ## What "Done" Looks Like
 
 A phase is done when:
 
-1. All tests pass (`bun run test` — green, 95%+ coverage).
+1. All tests pass (`bun run test` — green, 95%+ coverage, 98% GUI coverage).
 2. Zero TypeScript errors (`bun run typecheck`).
 3. Zero ESLint errors or warnings (`bun run lint`).
 4. Build succeeds (`bun run build`).
@@ -514,3 +552,5 @@ A phase is done when:
 6. No TODOs, no commented code, no `any` types, no skipped tests.
 7. API endpoints tested and documented.
 8. MCP tools verified with a test client.
+9. Every REST endpoint has a corresponding MCP tool (auto-synced).
+10. No external fonts or CDN resources.

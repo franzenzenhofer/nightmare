@@ -232,11 +232,7 @@
           try { parsed2 = JSON.parse(nbody); } catch(e) {}
           var tab2 = tabs.get(navMatch[1]);
           if (!tab2) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          var newUrl = resolveUrl(parsed2.url);
-          tab2.url = newUrl;
-          tab2.zone = classifyZone(newUrl);
-          tab2.frame.src = newUrl;
-          updateAll();
+          navigateTab(tab2, resolveUrl(parsed2.url));
           res.writeHead(200);
           res.end(JSON.stringify(tabToJson(tab2)));
         });
@@ -391,10 +387,11 @@
       }
       if (/^https?:\/\//.test(input) || input.startsWith('file://')) return input;
       if (/^\d{2,5}$/.test(input)) return 'http://localhost:' + input;
-      if (input.includes('.') && !input.includes(' ')) return 'https://' + input;
+      // File paths MUST be checked BEFORE the dot-in-domain heuristic
       if (input.startsWith('/') || input.startsWith('./') || input.startsWith('~')) {
         return localFileUrl(path.resolve(input.replace(/^~/, os.homedir())));
       }
+      if (input.includes('.') && !input.includes(' ') && !input.includes('/')) return 'https://' + input;
       return 'https://www.google.com/search?q=' + encodeURIComponent(input);
     }
 
@@ -410,6 +407,52 @@
       { title: 'About', url: 'nightmare://about' },
     ];
 
+    // ---- Navigate a tab (recreates iframe if zone changes) ----
+    function navigateTab(tab, newUrl) {
+      var oldZone = tab.zone;
+      var newZone = classifyZone(newUrl);
+      tab.url = newUrl;
+      tab.zone = newZone;
+
+      // If zone changed, we MUST recreate the iframe because nwfaketop/nwdisable
+      // attributes are only read at iframe creation time in NW.js
+      if (oldZone !== newZone || (oldZone === 'WEB' && newZone !== 'WEB') || (oldZone !== 'WEB' && newZone === 'WEB')) {
+        var wasActive = tab.frame.classList.contains('active');
+        var parent = tab.frame.parentNode;
+        tab.frame.remove();
+
+        var newFrame = document.createElement('iframe');
+        newFrame.id = tab.frame.id;
+        newFrame.src = newUrl;
+        if (newZone === 'WEB') {
+          newFrame.setAttribute('nwdisable', '');
+        } else {
+          newFrame.setAttribute('nwfaketop', '');
+        }
+        if (wasActive) newFrame.classList.add('active');
+        parent.appendChild(newFrame);
+        tab.frame = newFrame;
+
+        newFrame.addEventListener('load', function() {
+          try {
+            var doc = newFrame.contentDocument;
+            if (doc) {
+              tab.title = doc.title || tab.url;
+              tab.url = newFrame.contentWindow.location.href;
+              tab.zone = classifyZone(tab.url);
+            }
+          } catch (e) {
+            tab.title = tab.url;
+          }
+          tab.titleSpan.textContent = tab.title.length > 30 ? tab.title.substring(0, 30) + '...' : tab.title;
+          updateAll();
+        });
+      } else {
+        tab.frame.src = newUrl;
+      }
+      updateAll();
+    }
+
     function renderBookmarks() {
       var bar = document.getElementById('nm-bookmarks-bar');
       while (bar.firstChild) bar.removeChild(bar.firstChild);
@@ -420,11 +463,7 @@
         el.addEventListener('click', function() {
           var tab = getActiveTab();
           if (tab) {
-            var url = resolveUrl(bm.url);
-            tab.url = url;
-            tab.zone = classifyZone(url);
-            tab.frame.src = url;
-            updateAll();
+            navigateTab(tab, resolveUrl(bm.url));
           }
         });
         bar.appendChild(el);
@@ -630,11 +669,7 @@
     document.getElementById('nm-btn-home').addEventListener('click', function() {
       var tab = getActiveTab();
       if (tab) {
-        var url = resolveUrl(HOME_URL);
-        tab.url = url;
-        tab.zone = classifyZone(url);
-        tab.frame.src = url;
-        updateAll();
+        navigateTab(tab, resolveUrl(HOME_URL));
       }
     });
 
@@ -642,11 +677,7 @@
       if (e.key === 'Enter') {
         var tab = getActiveTab();
         if (tab) {
-          var url = resolveUrl(this.value);
-          tab.url = url;
-          tab.zone = classifyZone(url);
-          tab.frame.src = url;
-          updateAll();
+          navigateTab(tab, resolveUrl(this.value));
         }
         this.blur();
       }

@@ -199,10 +199,13 @@
     }
 
     function openInNewTab(filePath) {
+      // Use the local file URL format so resolveUrl() serves it via HTTP
+      // instead of misinterpreting paths with dots as domain names
+      var localUrl = 'http://127.0.0.1:' + API_PORT + '/file/' + encodeURIComponent(filePath);
       fetch(API_BASE + '/tabs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: filePath })
+        body: JSON.stringify({ url: localUrl })
       }).catch(function() {});
     }
 
