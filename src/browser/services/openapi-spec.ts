@@ -89,14 +89,17 @@ export function buildOperation(route: RouteMetadata): Record<string, unknown> {
   return op;
 }
 
-function collectTags(routes: readonly RouteMetadata[]): readonly { readonly name: string; readonly description: string }[] {
+export function collectTags(
+  routes: readonly RouteMetadata[],
+  descriptions: Readonly<Record<string, string>> = TAG_DESCRIPTIONS,
+): readonly { readonly name: string; readonly description: string }[] {
   const used = new Set<string>();
   for (const route of routes) {
     used.add(classifyTag(route.path, route.mcpName));
   }
   return [...used].map((t) => ({
     name: t,
-    description: TAG_DESCRIPTIONS[t] ?? t,
+    description: descriptions[t] ?? t,
   }));
 }
 

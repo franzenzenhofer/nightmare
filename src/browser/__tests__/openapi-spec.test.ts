@@ -6,6 +6,7 @@ import {
   buildPathParams,
   buildRequestBody,
   buildOperation,
+  collectTags,
 } from '../services/openapi-spec';
 import type { OpenApiSpec } from '../services/openapi-spec';
 import { ROUTE_METADATA } from '../services/openapi-routes';
@@ -336,5 +337,29 @@ describe('buildOperation', () => {
     };
     const op = buildOperation(route);
     expect(op.requestBody).toBeUndefined();
+  });
+});
+
+describe('collectTags', () => {
+  it('collects unique tags from routes', () => {
+    const routes = [
+      { method: 'GET', path: '/api/state', mcpName: 'nightmare_get_state', description: 'x', inputSchema: { type: 'object', properties: {} } },
+      { method: 'POST', path: '/api/shutdown', mcpName: 'nightmare_shutdown', description: 'x', inputSchema: { type: 'object', properties: {} } },
+    ];
+    const tags = collectTags(routes);
+    expect(tags).toHaveLength(2);
+    const names = tags.map((t) => t.name);
+    expect(names).toContain('state');
+    expect(names).toContain('system');
+  });
+
+  it('uses tag name as fallback when description map lacks entry', () => {
+    const routes = [
+      { method: 'GET', path: '/api/tabs', mcpName: 'nightmare_list_tabs', description: 'x', inputSchema: { type: 'object', properties: {} } },
+    ];
+    const tags = collectTags(routes, {});
+    expect(tags).toHaveLength(1);
+    expect(tags[0]?.name).toBe('tabs');
+    expect(tags[0]?.description).toBe('tabs');
   });
 });

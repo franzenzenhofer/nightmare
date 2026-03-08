@@ -32,4 +32,6 @@ export const ROUTE_METADATA: readonly RouteMetadata[] = [
   { method: 'GET', path: '/api/tabs/:id/query', mcpName: 'nightmare_query_dom', description: 'Query DOM element by selector', inputSchema: { type: 'object', properties: { tabId: { type: 'string' }, selector: { type: 'string' }, action: { type: 'string' } }, required: ['tabId', 'selector'] } },
   { method: 'POST', path: '/api/shutdown', mcpName: 'nightmare_shutdown', description: 'Shutdown the browser', inputSchema: { type: 'object', properties: {} } },
   { method: 'POST', path: '/api/relaunch', mcpName: 'nightmare_relaunch', description: 'Relaunch browser without killing process', inputSchema: { type: 'object', properties: {} } },
+  { method: 'POST', path: '/api/bookmarks', mcpName: 'nightmare_add_bookmark', description: 'Add a bookmark', inputSchema: { type: 'object', properties: { title: { type: 'string' }, url: { type: 'string' } }, required: ['title', 'url'] } },
+  { method: 'GET', path: '/api/history/search', mcpName: 'nightmare_search_history', description: 'Search browsing history', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
 ];

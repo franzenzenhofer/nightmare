@@ -2,7 +2,7 @@ import { Router } from './router';
 import { RouteRegistry } from './route-registry';
 import type { RouteDefinition } from './route-registry';
 import { registerAllRoutes } from './route-definitions';
-import type { RouteDependencies } from './route-definitions';
+import type { FullDependencies } from './route-definitions';
 
 function getBody(body: unknown): Record<string, unknown> {
   if (body !== null && body !== undefined) {
@@ -43,14 +43,14 @@ function addToRouter(router: Router, def: RouteDefinition): void {
 }
 
 export function createRouteRegistry(
-  deps: RouteDependencies,
+  deps: FullDependencies,
 ): RouteRegistry {
   const registry = new RouteRegistry();
   registerAllRoutes(registry, deps);
   return registry;
 }
 
-export function createApiRouter(deps: RouteDependencies): Router {
+export function createApiRouter(deps: FullDependencies): Router {
   const registry = createRouteRegistry(deps);
   const router = new Router();
 

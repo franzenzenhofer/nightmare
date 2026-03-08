@@ -3,17 +3,27 @@ import { getString, resolveTabId, withTab } from './route-helpers';
 import { registerTabActionRoutes } from './route-defs-tab-actions';
 import { registerWebviewRoutes } from './route-defs-webview';
 import { registerSystemRoutes } from './route-defs-system';
+import { registerDataRoutes } from './route-defs-data';
+import type { DataDependencies } from './route-defs-data';
 
 export type { RouteDependencies } from './route-helpers';
 import type { RouteDependencies } from './route-helpers';
 
+export type FullDependencies = RouteDependencies & Partial<DataDependencies>;
+
 export function registerAllRoutes(
-  registry: RouteRegistry, deps: RouteDependencies,
+  registry: RouteRegistry, deps: FullDependencies,
 ): void {
   registerCoreRoutes(registry, deps);
   registerTabActionRoutes(registry, deps);
   registerWebviewRoutes(registry, deps);
   registerSystemRoutes(registry);
+  if (deps.bookmarkManager && deps.historyManager) {
+    registerDataRoutes(registry, {
+      bookmarkManager: deps.bookmarkManager,
+      historyManager: deps.historyManager,
+    });
+  }
 }
 
 function registerCoreRoutes(r: RouteRegistry, d: RouteDependencies): void {
