@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NIGHTMARE // The Upside Down Browser</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Fira+Code:wght@400;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #e8e6e3;
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    /* ---- Stranger Things flickering background ---- */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(230, 57, 70, 0.06) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(180, 40, 50, 0.04) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(100, 20, 30, 0.05) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+      animation: bgPulse 8s ease-in-out infinite alternate;
+    }
+    @keyframes bgPulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
+    /* ---- Scan lines overlay ---- */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.08) 2px,
+        rgba(0, 0, 0, 0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+    }
+
+    /* ---- Hero Title ---- */
+    .hero { text-align: center; margin-bottom: 8px; }
+    .hero h1 {
+      font-family: 'Special Elite', serif;
+      font-size: 72px;
+      color: #e63946;
+      text-shadow:
+        0 0 10px rgba(230, 57, 70, 0.8),
+        0 0 40px rgba(230, 57, 70, 0.4),
+        0 0 80px rgba(230, 57, 70, 0.2),
+        0 0 120px rgba(180, 30, 40, 0.1);
+      letter-spacing: 12px;
+      position: relative;
+      animation: titleFlicker 4s ease-in-out infinite;
+    }
+    @keyframes titleFlicker {
+      0%, 100% { opacity: 1; }
+      92% { opacity: 1; }
+      93% { opacity: 0.3; }
+      94% { opacity: 1; }
+      96% { opacity: 0.5; }
+      97% { opacity: 1; }
+    }
+    .hero h1::after {
+      content: 'NIGHTMARE';
+      position: absolute;
+      left: 4px; top: 2px;
+      color: #60a5fa;
+      clip-path: inset(20% 0 50% 0);
+      animation: glitch 3s steps(1) infinite;
+    }
+    @keyframes glitch {
+      0%, 89%, 100% { clip-path: inset(20% 0 50% 0); transform: translateX(0); }
+      90% { clip-path: inset(10% 0 60% 0); transform: translateX(-4px); }
+      92% { clip-path: inset(40% 0 20% 0); transform: translateX(4px); }
+      94% { clip-path: inset(60% 0 5% 0); transform: translateX(-3px); }
+      96% { clip-path: inset(5% 0 70% 0); transform: translateX(2px); }
+    }
+    .hero .subtitle {
+      font-size: 11px;
+      letter-spacing: 6px;
+      color: #52545c;
+      margin-top: 8px;
+      text-transform: uppercase;
+    }
+    .hero .version {
+      font-size: 10px;
+      color: #e63946;
+      letter-spacing: 3px;
+      margin-top: 4px;
+      opacity: 0.7;
+    }
+
+    /* ---- Christmas lights (Stranger Things wall) ---- */
+    .lights-bar {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      padding: 8px 0;
+      flex-wrap: wrap;
+    }
+    .light {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      animation: lightBlink 2s ease-in-out infinite;
+    }
+    .light:nth-child(1) { background: #e63946; animation-delay: 0s; }
+    .light:nth-child(2) { background: #60a5fa; animation-delay: 0.2s; }
+    .light:nth-child(3) { background: #4ade80; animation-delay: 0.4s; }
+    .light:nth-child(4) { background: #fbbf24; animation-delay: 0.6s; }
+    .light:nth-child(5) { background: #c084fc; animation-delay: 0.8s; }
+    .light:nth-child(6) { background: #e63946; animation-delay: 1.0s; }
+    .light:nth-child(7) { background: #60a5fa; animation-delay: 1.2s; }
+    .light:nth-child(8) { background: #4ade80; animation-delay: 1.4s; }
+    .light:nth-child(9) { background: #fbbf24; animation-delay: 1.6s; }
+    .light:nth-child(10) { background: #c084fc; animation-delay: 1.8s; }
+    .light:nth-child(11) { background: #e63946; animation-delay: 0.3s; }
+    .light:nth-child(12) { background: #60a5fa; animation-delay: 0.7s; }
+    @keyframes lightBlink {
+      0%, 45%, 55%, 100% { opacity: 1; box-shadow: 0 0 6px currentColor, 0 0 12px currentColor; }
+      50% { opacity: 0.15; box-shadow: none; }
+    }
+
+    /* ---- Panels ---- */
+    .panel {
+      width: 100%;
+      background: rgba(14, 16, 26, 0.85);
+      border: 1px solid #1e2030;
+      border-radius: 8px;
+      padding: 20px 24px;
+      backdrop-filter: blur(8px);
+      position: relative;
+      overflow: hidden;
+    }
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #e63946, transparent);
+      opacity: 0.6;
+    }
+    .panel h2 {
+      font-size: 11px;
+      color: #e63946;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-bottom: 14px;
+      text-shadow: 0 0 8px rgba(230, 57, 70, 0.4);
+    }
+    .panel pre, .panel .mono {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.8;
+      color: #8b8d93;
+      white-space: pre-wrap;
+    }
+
+    /* ---- Grid layout for cards ---- */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+    /* ---- Buttons ---- */
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    button {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      padding: 10px 20px;
+      border: 1px solid #e63946;
+      background: rgba(230, 57, 70, 0.1);
+      color: #e63946;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 150ms;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    button:hover {
+      background: #e63946;
+      color: #0a0a0f;
+      box-shadow: 0 0 20px rgba(230, 57, 70, 0.4);
+    }
+    button:active { transform: scale(0.97); }
+    button.secondary {
+      border-color: #60a5fa;
+      color: #60a5fa;
+      background: rgba(96, 165, 250, 0.08);
+    }
+    button.secondary:hover {
+      background: #60a5fa;
+      color: #0a0a0f;
+      box-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
+    }
+    button.tertiary {
+      border-color: #4ade80;
+      color: #4ade80;
+      background: rgba(74, 222, 128, 0.08);
+    }
+    button.tertiary:hover {
+      background: #4ade80;
+      color: #0a0a0f;
+      box-shadow: 0 0 20px rgba(74, 222, 128, 0.4);
+    }
+
+    /* ---- Live terminal output ---- */
+    .terminal {
+      width: 100%;
+      background: #06060a;
+      border: 1px solid #1a1c28;
+      border-radius: 6px;
+      padding: 16px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      line-height: 1.7;
+    }
+    .terminal .line { display: block; }
+    .terminal .prompt { color: #e63946; }
+    .terminal .output { color: #4ade80; }
+    .terminal .error { color: #fca5a5; }
+    .terminal .dim { color: #52545c; }
+    .terminal .highlight { color: #fbbf24; }
+
+    /* ---- CPU / Memory meters ---- */
+    .meter-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+    .meter-label { font-size: 11px; color: #8b8d93; width: 90px; flex-shrink: 0; }
+    .meter-bar {
+      flex: 1; height: 8px;
+      background: #12141e;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 500ms ease;
+    }
+    .meter-fill.red { background: linear-gradient(90deg, #e63946, #ff6b6b); box-shadow: 0 0 8px rgba(230, 57, 70, 0.4); }
+    .meter-fill.blue { background: linear-gradient(90deg, #3b82f6, #60a5fa); box-shadow: 0 0 8px rgba(96, 165, 250, 0.4); }
+    .meter-fill.green { background: linear-gradient(90deg, #22c55e, #4ade80); box-shadow: 0 0 8px rgba(74, 222, 128, 0.4); }
+    .meter-fill.yellow { background: linear-gradient(90deg, #eab308, #fbbf24); box-shadow: 0 0 8px rgba(251, 191, 36, 0.4); }
+    .meter-value { font-size: 11px; color: #e8e6e3; width: 50px; text-align: right; flex-shrink: 0; }
+
+    /* ---- File tree ---- */
+    .file-tree { font-size: 11px; color: #8b8d93; }
+    .file-tree .dir { color: #60a5fa; cursor: pointer; }
+    .file-tree .dir:hover { text-decoration: underline; }
+    .file-tree .file { color: #8b8d93; padding-left: 16px; }
+    .file-tree .size { color: #52545c; }
+
+    /* ---- Network ---- */
+    .net-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid #12141e;
+      font-size: 11px;
+    }
+    .net-item:last-child { border-bottom: none; }
+    .net-method { color: #4ade80; width: 40px; }
+    .net-url { color: #8b8d93; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 8px; }
+    .net-status { width: 30px; text-align: right; }
+    .net-status.ok { color: #4ade80; }
+    .net-status.err { color: #e63946; }
+    .net-time { color: #52545c; width: 50px; text-align: right; }
+
+    /* ---- Footer ---- */
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      color: #52545c;
+      letter-spacing: 2px;
+      padding: 16px 0;
+    }
+    .footer .clock { color: #e63946; font-size: 24px; letter-spacing: 4px; margin-bottom: 8px;
+      text-shadow: 0 0 10px rgba(230, 57, 70, 0.5); }
+    .footer .uptime { color: #4ade80; }
+
+    /* ---- Particle canvas ---- */
+    #particles {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="particles"></canvas>
+
+  <div class="container">
+    <div class="hero">
+      <h1>NIGHTMARE</h1>
+      <div class="subtitle">The Upside Down Browser</div>
+      <div class="version">v0.1.0 // AI-FIRST // ZERO RESTRICTIONS</div>
+    </div>
+
+    <div class="lights-bar">
+      <div class="light"></div><div class="light"></div><div class="light"></div>
+      <div class="light"></div><div class="light"></div><div class="light"></div>
+      <div class="light"></div><div class="light"></div><div class="light"></div>
+      <div class="light"></div><div class="light"></div><div class="light"></div>
+    </div>
+
+    <!-- System Info -->
+    <div class="panel">
+      <h2>// System Reconnaissance</h2>
+      <pre id="sysinfo">Scanning system...</pre>
+    </div>
+
+    <!-- CPU + Memory meters -->
+    <div class="panel">
+      <h2>// Resource Monitor (Live)</h2>
+      <div id="meters"></div>
+    </div>
+
+    <!-- Grid: File Explorer + Network -->
+    <div class="grid">
+      <div class="panel">
+        <h2>// File System Access</h2>
+        <div id="file-tree" class="file-tree">Scanning...</div>
+      </div>
+      <div class="panel">
+        <h2>// Network Probes</h2>
+        <div id="network-log"></div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="btn-row">
+      <button id="btn-exec">Execute Node.js</button>
+      <button id="btn-fs" class="secondary">Scan File System</button>
+      <button id="btn-net" class="tertiary">Probe Network</button>
+      <button id="btn-env">Dump ENV</button>
+      <button id="btn-proc" class="secondary">List Processes</button>
+    </div>
+
+    <!-- Terminal output -->
+    <div class="panel">
+      <h2>// Terminal Output</h2>
+      <div id="terminal" class="terminal">
+        <span class="line dim">// Nightmare Terminal Ready</span>
+        <span class="line dim">// Click any button above to begin...</span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="clock" id="clock">--:--:--</div>
+      <div>Uptime: <span class="uptime" id="uptime">0s</span></div>
+      <div style="margin-top: 8px;">NIGHTMARE BROWSER // CHROME WITHOUT THE SAFETY RAILS</div>
+      <div style="margin-top: 4px;">ALL YOUR BASE ARE BELONG TO US</div>
+    </div>
+  </div>
+
+  <script>
+    var startTime = Date.now();
+    var terminalEl = document.getElementById('terminal');
+    var hasNode = false;
+    var osModule, fsModule, pathModule, cpModule, httpModule;
+
+    try {
+      osModule = require('os');
+      fsModule = require('fs');
+      pathModule = require('path');
+      cpModule = require('child_process');
+      httpModule = require('http');
+      hasNode = true;
+    } catch(e) { /* not available in this zone */ }
+
+    function log(text, cls) {
+      cls = cls || 'output';
+      var line = document.createElement('span');
+      line.className = 'line ' + cls;
+      line.textContent = text;
+      terminalEl.appendChild(line);
+      terminalEl.scrollTop = terminalEl.scrollHeight;
+    }
+
+    // ---- System Info ----
+    function loadSysInfo() {
+      var el = document.getElementById('sysinfo');
+      if (!hasNode) { el.textContent = 'Node.js not available in this zone.'; return; }
+      var cpuModel = osModule.cpus()[0] ? osModule.cpus()[0].model : 'Unknown';
+      var chromeVer = navigator.userAgent.match(/Chrome\/([\d.]+)/);
+      var lines = [
+        'Platform:     ' + osModule.platform() + ' ' + osModule.arch(),
+        'OS Release:   ' + osModule.release(),
+        'Node.js:      ' + process.version,
+        'NW.js:        ' + (process.versions['nw'] || process.versions['node-webkit'] || 'N/A'),
+        'Chromium:     ' + (process.versions['chromium'] || (chromeVer ? chromeVer[1] : 'N/A')),
+        'V8:           ' + (process.versions['v8'] || 'N/A'),
+        'CPU:          ' + cpuModel,
+        'Cores:        ' + osModule.cpus().length + ' logical cores',
+        'Memory:       ' + (osModule.totalmem() / 1e9).toFixed(1) + ' GB total / ' + (osModule.freemem() / 1e9).toFixed(1) + ' GB free',
+        'Hostname:     ' + osModule.hostname(),
+        'User:         ' + osModule.userInfo().username,
+        'Home:         ' + osModule.homedir(),
+        'Shell:        ' + (process.env.SHELL || process.env.COMSPEC || 'N/A'),
+        'PID:          ' + process.pid,
+        'Uptime:       ' + (osModule.uptime() / 3600).toFixed(1) + ' hours',
+        'Temp Dir:     ' + osModule.tmpdir(),
+        'Network IFs:  ' + Object.keys(osModule.networkInterfaces()).join(', '),
+      ];
+      el.textContent = lines.join('\n');
+    }
+
+    // ---- Resource Meters ----
+    function updateMeters() {
+      var el = document.getElementById('meters');
+      if (!hasNode) { el.textContent = 'Node.js required for live metrics.'; return; }
+
+      var totalMem = osModule.totalmem();
+      var freeMem = osModule.freemem();
+      var usedPct = ((1 - freeMem / totalMem) * 100).toFixed(1);
+
+      var cpus = osModule.cpus();
+      var html = '';
+      for (var i = 0; i < cpus.length; i++) {
+        var cpu = cpus[i];
+        var total = 0;
+        for (var k in cpu.times) { total += cpu.times[k]; }
+        var idle = cpu.times.idle;
+        var usage = ((1 - idle / total) * 100).toFixed(0);
+        var color = usage > 80 ? 'red' : usage > 50 ? 'yellow' : 'green';
+        html += '<div class="meter-row">' +
+          '<span class="meter-label">CPU ' + i + '</span>' +
+          '<div class="meter-bar"><div class="meter-fill ' + color + '" style="width:' + usage + '%"></div></div>' +
+          '<span class="meter-value">' + usage + '%</span></div>';
+      }
+
+      var memColor = usedPct > 80 ? 'red' : usedPct > 60 ? 'yellow' : 'blue';
+      html += '<div class="meter-row">' +
+        '<span class="meter-label">Memory</span>' +
+        '<div class="meter-bar"><div class="meter-fill ' + memColor + '" style="width:' + usedPct + '%"></div></div>' +
+        '<span class="meter-value">' + usedPct + '%</span></div>';
+
+      el.innerHTML = html;
+    }
+
+    // ---- File Explorer ----
+    function formatSize(bytes) {
+      if (bytes > 1e6) return (bytes/1e6).toFixed(1) + 'MB';
+      if (bytes > 1e3) return (bytes/1e3).toFixed(1) + 'KB';
+      return bytes + 'B';
+    }
+
+    function buildFileHtml(dir, entries) {
+      var parentDir = pathModule.dirname(dir).replace(/'/g, "\\'");
+      var html = '<div class="dir" data-path="' + parentDir + '">..</div>';
+      html += '<div style="color:#fbbf24;margin-bottom:4px;font-size:10px">' + dir + '/</div>';
+      var max = Math.min(entries.length, 20);
+      for (var i = 0; i < max; i++) {
+        var e = entries[i];
+        if (e.isDirectory()) {
+          var full = pathModule.join(dir, e.name).replace(/'/g, "\\'");
+          html += '<div class="file"><span class="dir" data-path="' + full + '">' + e.name + '/</span></div>';
+        } else {
+          try {
+            var stat = fsModule.statSync(pathModule.join(dir, e.name));
+            html += '<div class="file">' + e.name + ' <span class="size">(' + formatSize(stat.size) + ')</span></div>';
+          } catch(err) {
+            html += '<div class="file">' + e.name + '</div>';
+          }
+        }
+      }
+      if (entries.length > 20) html += '<div class="dim">... and ' + (entries.length - 20) + ' more</div>';
+      return html;
+    }
+
+    function loadFileTree() {
+      var el = document.getElementById('file-tree');
+      if (!hasNode) { el.textContent = 'Node.js required.'; return; }
+      try {
+        var cwd = process.cwd();
+        var entries = fsModule.readdirSync(cwd, { withFileTypes: true });
+        el.innerHTML = buildFileHtml(cwd, entries);
+      } catch(err) { el.textContent = 'Error: ' + err.message; }
+    }
+
+    function browseDir(dir) {
+      var el = document.getElementById('file-tree');
+      try {
+        var entries = fsModule.readdirSync(dir, { withFileTypes: true });
+        el.innerHTML = buildFileHtml(dir, entries);
+        log('[FS] Browsed: ' + dir + ' (' + entries.length + ' entries)', 'output');
+      } catch(err) {
+        el.textContent = 'Error: ' + err.message;
+        log('[FS] Error: ' + err.message, 'error');
+      }
+    }
+
+    // Event delegation for dir clicks
+    document.getElementById('file-tree').addEventListener('click', function(e) {
+      var target = e.target;
+      if (target.classList.contains('dir') && target.dataset.path) {
+        browseDir(target.dataset.path);
+      }
+    });
+
+    // ---- Network Demo ----
+    function loadNetworkLog() {
+      var el = document.getElementById('network-log');
+      el.innerHTML = '<div class="net-item"><span class="net-method">GET</span><span class="net-url">localhost:6660/api/state</span><span class="net-status">...</span><span class="net-time">...</span></div>';
+
+      var start = performance.now();
+      fetch('http://127.0.0.1:6660/api/state')
+        .then(function(r) { return r.json().then(function(d) { return {status: r.status, data: d}; }); })
+        .then(function(res) {
+          var ms = (performance.now() - start).toFixed(0);
+          el.innerHTML = '<div class="net-item">' +
+            '<span class="net-method">GET</span>' +
+            '<span class="net-url">localhost:6660/api/state</span>' +
+            '<span class="net-status ok">' + res.status + '</span>' +
+            '<span class="net-time">' + ms + 'ms</span></div>' +
+            '<div style="font-size:10px;color:#52545c;margin-top:8px;white-space:pre-wrap">' +
+            JSON.stringify(res.data, null, 2) + '</div>';
+        })
+        .catch(function() {
+          el.innerHTML = '<div class="net-item"><span class="net-method">GET</span>' +
+            '<span class="net-url">localhost:6660/api/state</span>' +
+            '<span class="net-status err">ERR</span><span class="net-time">-</span></div>';
+        });
+    }
+
+    // ---- Button Actions ----
+    function runNodeDemo() {
+      log('', 'dim');
+      log('[EXEC] === Node.js Power Demo ===', 'prompt');
+      if (!hasNode) { log('[EXEC] Node.js not available in this zone', 'error'); return; }
+
+      log('[EXEC] process.pid = ' + process.pid, 'output');
+      log('[EXEC] process.version = ' + process.version, 'output');
+      log('[EXEC] process.arch = ' + process.arch, 'output');
+      log('[EXEC] process.platform = ' + process.platform, 'output');
+      log('[EXEC] os.hostname() = ' + osModule.hostname(), 'output');
+      log('[EXEC] os.userInfo().username = ' + osModule.userInfo().username, 'output');
+      log('[EXEC] os.cpus().length = ' + osModule.cpus().length + ' cores', 'output');
+      log('[EXEC] os.totalmem() = ' + (osModule.totalmem()/1e9).toFixed(2) + ' GB', 'output');
+      log('[EXEC] os.freemem() = ' + (osModule.freemem()/1e9).toFixed(2) + ' GB', 'output');
+
+      // Write and read a temp file
+      try {
+        var tmpFile = pathModule.join(osModule.tmpdir(), 'nightmare-test-' + Date.now() + '.txt');
+        fsModule.writeFileSync(tmpFile, 'Hello from the Upside Down! Timestamp: ' + new Date().toISOString());
+        var content = fsModule.readFileSync(tmpFile, 'utf8');
+        log('[EXEC] Wrote temp file: ' + tmpFile, 'highlight');
+        log('[EXEC] Read back: "' + content + '"', 'output');
+        fsModule.unlinkSync(tmpFile);
+        log('[EXEC] Deleted temp file.', 'dim');
+      } catch(e) { log('[EXEC] File I/O error: ' + e.message, 'error'); }
+
+      // Create a tiny HTTP server, self-request, then close
+      try {
+        var testServer = httpModule.createServer(function(req, res) {
+          res.writeHead(200, {'Content-Type': 'text/plain'});
+          res.end('Nightmare says hello at ' + new Date().toISOString());
+        });
+        testServer.listen(0, '127.0.0.1', function() {
+          var port = testServer.address().port;
+          log('[EXEC] Started HTTP server on port ' + port, 'highlight');
+          fetch('http://127.0.0.1:' + port)
+            .then(function(r) { return r.text(); })
+            .then(function(t) {
+              log('[EXEC] Self-request response: "' + t + '"', 'output');
+              testServer.close();
+              log('[EXEC] Server closed. Demo complete.', 'dim');
+            });
+        });
+      } catch(e) { log('[EXEC] HTTP error: ' + e.message, 'error'); }
+    }
+
+    function runFileSystemDemo() {
+      log('', 'dim');
+      log('[FS] === File System Deep Scan ===', 'prompt');
+      if (!hasNode) { log('[FS] Node.js not available in this zone', 'error'); return; }
+
+      var home = osModule.homedir();
+      log('[FS] Home directory: ' + home, 'output');
+
+      try {
+        var entries = fsModule.readdirSync(home);
+        log('[FS] ' + entries.length + ' items in home directory:', 'output');
+        var max = Math.min(entries.length, 15);
+        for (var i = 0; i < max; i++) {
+          var e = entries[i];
+          try {
+            var stat = fsModule.statSync(pathModule.join(home, e));
+            var type = stat.isDirectory() ? 'DIR ' : 'FILE';
+            log('[FS]   ' + type + '  ' + e + ' (' + formatSize(stat.size) + ')', stat.isDirectory() ? 'highlight' : 'output');
+          } catch(err) {
+            log('[FS]   ????  ' + e + ' (no access)', 'dim');
+          }
+        }
+        if (entries.length > 15) log('[FS]   ... and ' + (entries.length - 15) + ' more', 'dim');
+      } catch(e) { log('[FS] Error: ' + e.message, 'error'); }
+    }
+
+    function runNetworkDemo() {
+      log('', 'dim');
+      log('[NET] === Network Probe ===', 'prompt');
+
+      var endpoints = ['/api/state', '/api/tabs'];
+      endpoints.forEach(function(ep) {
+        var t0 = performance.now();
+        fetch('http://127.0.0.1:6660' + ep)
+          .then(function(r) { return r.json().then(function(d) { return {s: r.status, d: d}; }); })
+          .then(function(res) {
+            var ms = (performance.now() - t0).toFixed(0);
+            log('[NET] GET ' + ep + ' -> ' + res.s + ' (' + ms + 'ms)', 'output');
+            log('[NET]   ' + JSON.stringify(res.d).substring(0, 120), 'dim');
+          })
+          .catch(function(e) { log('[NET] GET ' + ep + ' -> FAILED: ' + e.message, 'error'); });
+      });
+
+      if (hasNode) {
+        var nets = osModule.networkInterfaces();
+        for (var name in nets) {
+          nets[name].forEach(function(iface) {
+            if (iface.family === 'IPv4' || iface.family === 4) {
+              log('[NET] Interface ' + name + ': ' + iface.address + ' (' + (iface.internal ? 'internal' : 'external') + ')', 'highlight');
+            }
+          });
+        }
+      }
+    }
+
+    function showEnvironment() {
+      log('', 'dim');
+      log('[ENV] === Environment Variables ===', 'prompt');
+      if (!hasNode) { log('[ENV] Node.js required', 'error'); return; }
+      var keys = Object.keys(process.env).sort();
+      log('[ENV] ' + keys.length + ' variables found:', 'output');
+      var max = Math.min(keys.length, 30);
+      for (var i = 0; i < max; i++) {
+        var k = keys[i];
+        var v = process.env[k] || '';
+        // Redact sensitive values
+        var lower = k.toLowerCase();
+        if (lower.indexOf('key') !== -1 || lower.indexOf('secret') !== -1 || lower.indexOf('token') !== -1 || lower.indexOf('pass') !== -1) {
+          v = '****REDACTED****';
+        } else if (v.length > 80) {
+          v = v.substring(0, 80) + '...';
+        }
+        log('[ENV] ' + k + '=' + v, 'output');
+      }
+      if (keys.length > 30) log('[ENV] ... and ' + (keys.length - 30) + ' more', 'dim');
+    }
+
+    function showProcesses() {
+      log('', 'dim');
+      log('[PROC] === Running Processes ===', 'prompt');
+      if (!hasNode) { log('[PROC] Node.js required', 'error'); return; }
+      try {
+        // Using execFileSync (safe, no shell injection)
+        var result = cpModule.execFileSync('ps', ['aux'], { encoding: 'utf8', timeout: 5000 });
+        var lines = result.split('\n').slice(0, 20);
+        for (var i = 0; i < lines.length; i++) {
+          var l = lines[i];
+          if (l.trim()) {
+            var isNightmare = l.indexOf('nightmare') !== -1 || l.indexOf('nwjs') !== -1;
+            log('[PROC] ' + l, isNightmare ? 'highlight' : 'dim');
+          }
+        }
+      } catch(e) { log('[PROC] Error: ' + e.message, 'error'); }
+    }
+
+    // Wire up buttons
+    document.getElementById('btn-exec').addEventListener('click', runNodeDemo);
+    document.getElementById('btn-fs').addEventListener('click', runFileSystemDemo);
+    document.getElementById('btn-net').addEventListener('click', runNetworkDemo);
+    document.getElementById('btn-env').addEventListener('click', showEnvironment);
+    document.getElementById('btn-proc').addEventListener('click', showProcesses);
+
+    // ---- Clock + Uptime ----
+    function updateClock() {
+      document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+      var secs = Math.floor((Date.now() - startTime) / 1000);
+      var m = Math.floor(secs / 60);
+      var s = secs % 60;
+      document.getElementById('uptime').textContent = (m > 0 ? m + 'm ' : '') + s + 's';
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // ---- Floating particles (Upside Down ash/spores) ----
+    (function() {
+      var canvas = document.getElementById('particles');
+      var ctx = canvas.getContext('2d');
+      var particles = [];
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      var colors = ['#e63946', '#60a5fa', '#4ade80', '#fbbf24', '#c084fc'];
+      for (var i = 0; i < 60; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 0.3,
+          vy: -Math.random() * 0.5 - 0.1,
+          size: Math.random() * 2 + 0.5,
+          alpha: Math.random() * 0.4 + 0.1,
+          color: colors[Math.floor(Math.random() * colors.length)]
+        });
+      }
+
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (var i = 0; i < particles.length; i++) {
+          var p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          if (p.y < -10) { p.y = canvas.height + 10; p.x = Math.random() * canvas.width; }
+          if (p.x < -10) p.x = canvas.width + 10;
+          if (p.x > canvas.width + 10) p.x = -10;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.alpha;
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        requestAnimationFrame(animate);
+      }
+      animate();
+    })();
+
+    // ---- Init ----
+    loadSysInfo();
+    updateMeters();
+    loadFileTree();
+    loadNetworkLog();
+    setInterval(updateMeters, 3000);
+
+    console.log('[Nightmare] Demo loaded at ' + new Date().toISOString());
+    console.log('[Nightmare] Node.js available: ' + hasNode);
+    if (hasNode) console.log('[Nightmare] PID: ' + process.pid + ' | Platform: ' + osModule.platform() + ' | User: ' + osModule.userInfo().username);
+  </script>
+</body>
+</html>

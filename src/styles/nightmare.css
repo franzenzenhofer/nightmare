@@ -16,20 +16,26 @@ html, body {
 #nm-browser {
   display: flex; flex-direction: column;
   height: 100vh; width: 100vw;
+  border: 1px solid #1a1d2e;
 }
 
+/* ---- Titlebar ---- */
 #nm-titlebar {
   display: flex; align-items: center;
   height: var(--nm-titlebar-h);
   background: var(--nm-bg-primary);
   -webkit-app-region: drag;
   padding: 0 var(--nm-space-2);
+  border-bottom: 1px solid #0f1118;
 }
 
 #nm-titlebar .nm-title {
   flex: 1; font-size: var(--nm-text-sm);
-  color: var(--nm-text-secondary);
+  color: var(--nm-accent);
   text-align: center;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(230, 57, 70, 0.3);
+  font-family: var(--nm-font-mono);
 }
 
 #nm-titlebar .nm-window-controls {
@@ -43,6 +49,7 @@ html, body {
   color: var(--nm-text-muted);
   cursor: pointer; border-radius: var(--nm-radius-sm);
   font-size: 14px;
+  transition: all 0.15s;
 }
 
 #nm-titlebar .nm-window-controls button:hover {
@@ -50,6 +57,12 @@ html, body {
   color: var(--nm-text-primary);
 }
 
+#nm-titlebar .nm-window-controls button#nm-btn-close:hover {
+  background: var(--nm-accent);
+  color: white;
+}
+
+/* ---- Tab bar ---- */
 #nm-tab-bar {
   display: flex; align-items: stretch;
   height: var(--nm-tabbar-h);
@@ -58,6 +71,7 @@ html, body {
   border-bottom: 1px solid var(--nm-tab-border);
 }
 
+/* ---- Navigation bar ---- */
 #nm-nav-bar {
   display: flex; align-items: center;
   gap: var(--nm-space-2);
@@ -73,15 +87,17 @@ html, body {
   color: var(--nm-text-secondary);
   cursor: pointer; border-radius: var(--nm-radius-sm);
   font-size: 14px;
+  transition: all 0.15s;
 }
 
 #nm-nav-bar button:hover:not(:disabled) {
   background: var(--nm-bg-hover);
-  color: var(--nm-text-primary);
+  color: var(--nm-accent);
 }
 
-#nm-nav-bar button:disabled { opacity: 0.3; cursor: default; }
+#nm-nav-bar button:disabled { opacity: 0.2; cursor: default; }
 
+/* ---- URL bar ---- */
 .nm-url-bar {
   flex: 1; height: 28px;
   background: var(--nm-bg-input);
@@ -92,13 +108,23 @@ html, body {
   font-size: var(--nm-text-base);
   color: var(--nm-text-url);
   outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .nm-url-bar:focus {
   border-color: var(--nm-accent);
-  box-shadow: 0 0 0 1px var(--nm-accent-dim);
+  box-shadow: 0 0 0 1px var(--nm-accent-dim), 0 0 12px var(--nm-accent-glow);
 }
 
+/* ---- Zone dot (in URL bar) ---- */
+.nm-url-zone-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+
+/* ---- Bookmarks bar ---- */
 #nm-bookmarks-bar {
   display: flex; align-items: center;
   gap: var(--nm-space-1);
@@ -108,21 +134,27 @@ html, body {
   border-bottom: 1px solid var(--nm-tab-border);
   font-size: var(--nm-text-xs);
   overflow: hidden;
+  font-family: var(--nm-font-mono);
 }
 
-#nm-bookmarks-bar a {
+#nm-bookmarks-bar a, #nm-bookmarks-bar .nm-bookmark {
   color: var(--nm-text-secondary);
   text-decoration: none;
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: var(--nm-radius-sm);
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 10px;
+  letter-spacing: 0.5px;
 }
 
-#nm-bookmarks-bar a:hover {
+#nm-bookmarks-bar a:hover, #nm-bookmarks-bar .nm-bookmark:hover {
   background: var(--nm-bg-hover);
-  color: var(--nm-text-primary);
+  color: var(--nm-accent);
 }
 
+/* ---- Content area ---- */
 #nm-content-area {
   flex: 1; position: relative;
   overflow: hidden;
@@ -137,6 +169,7 @@ html, body {
 
 #nm-content-area webview.active { display: block; }
 
+/* ---- Status bar ---- */
 #nm-status-bar {
   display: flex; align-items: center;
   gap: var(--nm-space-3);
@@ -147,4 +180,8 @@ html, body {
   font-size: var(--nm-text-xs);
   color: var(--nm-text-muted);
   font-family: var(--nm-font-mono);
+}
+
+#nm-status-bar #nm-status-zone {
+  color: var(--nm-accent);
 }

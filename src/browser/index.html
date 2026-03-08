@@ -2,17 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Nightmare</title>
+  <title>Nightmare Browser</title>
   <link rel="stylesheet" href="../styles/nightmare.css">
   <link rel="stylesheet" href="../styles/tab-bar.css">
   <link rel="stylesheet" href="../styles/nav-bar.css">
   <link rel="stylesheet" href="../styles/security-banner.css">
   <link rel="stylesheet" href="../styles/sidebar.css">
+  <style>
+    #nm-content-area iframe {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border: none;
+      display: none;
+      background: #050508;
+    }
+    #nm-content-area iframe.active { display: block; }
+  </style>
 </head>
 <body>
   <div id="nm-browser">
     <div id="nm-titlebar">
-      <span class="nm-title">Nightmare</span>
+      <span class="nm-title" id="nm-window-title">Nightmare Browser</span>
       <div class="nm-window-controls">
         <button id="nm-btn-minimize" title="Minimize">&#x2013;</button>
         <button id="nm-btn-maximize" title="Maximize">&#x25A1;</button>
@@ -21,7 +32,7 @@
     </div>
 
     <div id="nm-tab-bar">
-      <button id="nm-new-tab" class="nm-new-tab-btn" title="New Tab">+</button>
+      <button id="nm-new-tab" class="nm-new-tab-btn" title="New Tab (Ctrl+T)">+</button>
     </div>
 
     <div id="nm-nav-bar">
@@ -29,7 +40,7 @@
       <button id="nm-btn-forward" title="Forward" disabled>&#x2192;</button>
       <button id="nm-btn-reload" title="Reload">&#x21BB;</button>
       <button id="nm-btn-home" title="Home">&#x2302;</button>
-      <div class="nm-url-zone-dot"></div>
+      <div class="nm-url-zone-dot" id="nm-zone-dot"></div>
       <input id="nm-url-input" class="nm-url-bar" type="text"
              placeholder="Search or enter URL..." spellcheck="false">
       <button id="nm-btn-bookmark" title="Bookmark this page">&#x2606;</button>
@@ -37,14 +48,515 @@
 
     <div id="nm-bookmarks-bar"></div>
 
-    <div id="nm-security-banner" class="nm-security-banner" style="display:none"></div>
+    <div id="nm-security-banner" style="display:none"></div>
 
     <div id="nm-content-area"></div>
 
     <div id="nm-status-bar">
       <span id="nm-status-zone">Ready</span>
+      <span id="nm-status-node"></span>
       <span id="nm-status-tabs">0 tabs</span>
+      <span id="nm-status-clock"></span>
     </div>
   </div>
+
+  <script>
+    var gui = require('nw.gui');
+    var win = gui.Window.get();
+    var path = require('path');
+    var http = require('http');
+    var fs = require('fs');
+    var os = require('os');
+    console.log('[Nightmare] Modules loaded');
+
+    // ---- State ----
+    var tabs = new Map();
+    var activeTabId = null;
+    var tabCounter = 0;
+    var dismissedBanners = new Set();
+    var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
+    // NW.js doesn't provide __dirname in inline scripts — use process.cwd() or nwapp-path
+    var _srcDir = process.cwd();
+    // If cwd doesn't end with /src, look for src/ subdir or nwapp-path from argv
+    if (!_srcDir.endsWith('/src') && !_srcDir.endsWith('\\src')) {
+      // Try argv for --nwapp-path=
+      process.argv.forEach(function(a) {
+        if (a === 'src/' || a === 'src') _srcDir = path.resolve(a);
+      });
+    }
+    // Fallback: use the package.json location
+    if (!fs.existsSync(path.join(_srcDir, 'browser', 'index.html'))) {
+      _srcDir = path.resolve('src');
+    }
+    var _projectDir = path.dirname(_srcDir);
+    var samplesDir = path.join(_projectDir, 'samples');
+    var pagesDir = path.join(_srcDir, 'pages');
+    var HOME_URL = 'nightmare://home';
+
+    // ---- Unified server: API + local file serving on single port ----
+    function localFileUrl(filePath) {
+      return 'http://127.0.0.1:' + API_PORT + '/file/' + encodeURIComponent(filePath);
+    }
+
+    function tabToJson(t) {
+      return { id: t.id, url: t.url, title: t.title, zone: t.zone };
+    }
+
+    function serveMimeType(ext) {
+      var m = {
+        '.html': 'text/html', '.htm': 'text/html',
+        '.css': 'text/css', '.js': 'application/javascript',
+        '.json': 'application/json', '.png': 'image/png',
+        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif', '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon', '.woff': 'font/woff',
+        '.woff2': 'font/woff2', '.ttf': 'font/ttf'
+      };
+      return m[ext] || 'text/plain';
+    }
+
+    var server = http.createServer(function(req, res) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+      if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+      var url = req.url || '/';
+
+      // ---- Local file serving: /file/<encoded-path> ----
+      if (url.startsWith('/file/')) {
+        var filePath = decodeURIComponent(url.substring(6));
+        try {
+          var resolved = path.resolve(filePath);
+          var content = fs.readFileSync(resolved);
+          var ext = path.extname(resolved).toLowerCase();
+          res.writeHead(200, { 'Content-Type': serveMimeType(ext) });
+          res.end(content);
+        } catch(e) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('File not found: ' + filePath);
+        }
+        return;
+      }
+
+      // ---- API endpoints ----
+      res.setHeader('Content-Type', 'application/json');
+
+      if (url === '/api/state' && req.method === 'GET') {
+        var tabList = [];
+        tabs.forEach(function(t) { tabList.push(tabToJson(t)); });
+        res.writeHead(200);
+        res.end(JSON.stringify({ tabs: tabList, activeTabId: activeTabId, tabCount: tabs.size, nodeVersion: process.version }));
+        return;
+      }
+
+      if (url === '/api/tabs' && req.method === 'GET') {
+        var list = [];
+        tabs.forEach(function(t) { list.push(tabToJson(t)); });
+        res.writeHead(200);
+        res.end(JSON.stringify(list));
+        return;
+      }
+
+      if (url === '/api/tabs' && req.method === 'POST') {
+        var body = '';
+        req.on('data', function(c) { body += c; });
+        req.on('end', function() {
+          var parsed = {};
+          try { parsed = JSON.parse(body); } catch(e) {}
+          var tab = createTab(parsed.url);
+          res.writeHead(201);
+          res.end(JSON.stringify(tabToJson(tab)));
+        });
+        return;
+      }
+
+      var deleteMatch = url.match(/^\/api\/tabs\/(.+)$/);
+      if (deleteMatch && req.method === 'DELETE') {
+        closeTab(deleteMatch[1]);
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      var navMatch = url.match(/^\/api\/tabs\/(.+)\/navigate$/);
+      if (navMatch && req.method === 'POST') {
+        var nbody = '';
+        req.on('data', function(c) { nbody += c; });
+        req.on('end', function() {
+          var parsed2 = {};
+          try { parsed2 = JSON.parse(nbody); } catch(e) {}
+          var tab2 = tabs.get(navMatch[1]);
+          if (!tab2) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+          var newUrl = resolveUrl(parsed2.url);
+          tab2.url = newUrl;
+          tab2.zone = classifyZone(newUrl);
+          tab2.frame.src = newUrl;
+          updateAll();
+          res.writeHead(200);
+          res.end(JSON.stringify(tabToJson(tab2)));
+        });
+        return;
+      }
+
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    server.on('error', function(err) {
+      console.error('[Nightmare] Server error:', err.message);
+      if (err.code === 'EADDRINUSE') {
+        console.warn('[Nightmare] Port ' + API_PORT + ' in use, trying dynamic port...');
+        server.listen(0, function() {
+          API_PORT = server.address().port;
+          console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT + ' (fallback)');
+          initBrowser();
+        });
+      }
+    });
+
+    server.listen(API_PORT, function() {
+      API_PORT = server.address().port;
+      console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT);
+      initBrowser();
+    });
+
+    // Graceful shutdown: free the port when window closes
+    win.on('close', function() {
+      try { server.close(); } catch(e) {}
+      win.close(true);
+    });
+
+    // ---- Zone classification ----
+    function classifyZone(url) {
+      try {
+        var parsed = new URL(url);
+        if (parsed.protocol === 'file:') return 'LOCAL';
+        if (parsed.protocol === 'nightmare:') return 'LOCAL';
+        var h = parsed.hostname;
+        if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0'
+            || h.endsWith('.localhost')
+            || /^192\.168\.\d+\.\d+$/.test(h)
+            || /^10\.\d+\.\d+\.\d+$/.test(h)
+            || /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(h)) return 'LOCALHOST';
+        return 'WEB';
+      } catch (e) { return 'LOCAL'; }
+    }
+
+    var ZONE_COLORS = { LOCAL: '#4ade80', LOCALHOST: '#60a5fa', WEB: '#ff3333' };
+    var ZONE_CSS = { LOCAL: 'local', LOCALHOST: 'localhost', WEB: 'web' };
+    var ZONE_MSG = {
+      LOCAL: 'LOCAL FILE  //  Full Node.js access, no restrictions.',
+      LOCALHOST: 'LOCALHOST  //  Node.js enabled, no CORS restrictions.',
+      WEB: 'DANGER: OPEN WEB  //  ALL SECURITY DISABLED  //  Passwords, cookies, data NOT PROTECTED'
+    };
+
+    // ---- URL resolution ----
+    function resolveUrl(input) {
+      if (!input) return resolveUrl(HOME_URL);
+      if (input.startsWith('nightmare://')) {
+        var pageName = input.replace('nightmare://', '');
+        if (pageName === 'home') return localFileUrl(path.join(samplesDir, 'hello.html'));
+        var samplePath = path.join(samplesDir, pageName + '.html');
+        if (fs.existsSync(samplePath)) return localFileUrl(samplePath);
+        var pagePath = path.join(pagesDir, pageName + '.html');
+        if (fs.existsSync(pagePath)) return localFileUrl(pagePath);
+        return localFileUrl(path.join(pagesDir, 'newtab.html'));
+      }
+      if (/^https?:\/\//.test(input) || input.startsWith('file://')) return input;
+      if (/^\d{2,5}$/.test(input)) return 'http://localhost:' + input;
+      if (input.includes('.') && !input.includes(' ')) return 'https://' + input;
+      if (input.startsWith('/') || input.startsWith('./') || input.startsWith('~')) {
+        return localFileUrl(path.resolve(input.replace(/^~/, os.homedir())));
+      }
+      return 'https://www.google.com/search?q=' + encodeURIComponent(input);
+    }
+
+    // ---- Bookmarks ----
+    var BOOKMARKS = [
+      { title: 'Home', url: 'nightmare://home' },
+      { title: 'New Tab', url: 'nightmare://newtab' },
+      { title: 'Settings', url: 'nightmare://settings' },
+      { title: 'History', url: 'nightmare://history' },
+      { title: 'About', url: 'nightmare://about' },
+    ];
+
+    function renderBookmarks() {
+      var bar = document.getElementById('nm-bookmarks-bar');
+      while (bar.firstChild) bar.removeChild(bar.firstChild);
+      BOOKMARKS.forEach(function(bm) {
+        var el = document.createElement('span');
+        el.className = 'nm-bookmark';
+        el.textContent = bm.title;
+        el.addEventListener('click', function() {
+          var tab = getActiveTab();
+          if (tab) {
+            var url = resolveUrl(bm.url);
+            tab.url = url;
+            tab.zone = classifyZone(url);
+            tab.frame.src = url;
+            updateAll();
+          }
+        });
+        bar.appendChild(el);
+      });
+    }
+
+    // ---- Tab management ----
+    function createTab(url) {
+      url = resolveUrl(url || HOME_URL);
+      tabCounter++;
+      var id = 'tab-' + tabCounter;
+      var zone = classifyZone(url);
+
+      var frame = document.createElement('iframe');
+      frame.id = 'frame-' + id;
+      frame.src = url;
+      if (zone === 'WEB') {
+        frame.setAttribute('nwdisable', '');
+      } else {
+        frame.setAttribute('nwfaketop', '');
+      }
+      document.getElementById('nm-content-area').appendChild(frame);
+
+      var tabEl = document.createElement('div');
+      tabEl.className = 'nm-tab';
+      tabEl.dataset.tabId = id;
+
+      var titleSpan = document.createElement('span');
+      titleSpan.className = 'nm-tab-title';
+      titleSpan.textContent = 'Loading...';
+      tabEl.appendChild(titleSpan);
+
+      var closeBtn = document.createElement('span');
+      closeBtn.className = 'nm-tab-close';
+      closeBtn.textContent = '\u00D7';
+      closeBtn.addEventListener('click', function(e) { e.stopPropagation(); closeTab(id); });
+      tabEl.appendChild(closeBtn);
+
+      tabEl.addEventListener('click', function() { activateTab(id); });
+
+      var tabBar = document.getElementById('nm-tab-bar');
+      tabBar.insertBefore(tabEl, document.getElementById('nm-new-tab'));
+
+      var tab = { id: id, url: url, title: 'Loading...', zone: zone, frame: frame, tabEl: tabEl, titleSpan: titleSpan };
+      tabs.set(id, tab);
+
+      frame.addEventListener('load', function() {
+        try {
+          var doc = frame.contentDocument;
+          if (doc) {
+            tab.title = doc.title || tab.url;
+            tab.url = frame.contentWindow.location.href;
+            tab.zone = classifyZone(tab.url);
+          }
+        } catch (e) {
+          tab.title = tab.url;
+        }
+        titleSpan.textContent = tab.title.length > 30 ? tab.title.substring(0, 30) + '...' : tab.title;
+        updateAll();
+      });
+
+      activateTab(id);
+      return tab;
+    }
+
+    function closeTab(id) {
+      var tab = tabs.get(id);
+      if (!tab) return;
+      tab.frame.remove();
+      tab.tabEl.remove();
+      tabs.delete(id);
+      dismissedBanners.delete(id);
+      if (activeTabId === id) {
+        var remaining = Array.from(tabs.keys());
+        if (remaining.length > 0) {
+          activateTab(remaining[remaining.length - 1]);
+        } else {
+          createTab();
+        }
+      }
+      updateAll();
+    }
+
+    function activateTab(id) {
+      var tab = tabs.get(id);
+      if (!tab) return;
+      tabs.forEach(function(t) {
+        t.frame.classList.remove('active');
+        t.tabEl.classList.remove('active');
+      });
+      tab.frame.classList.add('active');
+      tab.tabEl.classList.add('active');
+      activeTabId = id;
+      updateAll();
+    }
+
+    function getActiveTab() {
+      return activeTabId ? tabs.get(activeTabId) : null;
+    }
+
+    // ---- UI updates ----
+    function updateAll() {
+      updateNavBar();
+      updateBanner();
+      updateStatusBar();
+      updateWindowTitle();
+    }
+
+    function updateNavBar() {
+      var tab = getActiveTab();
+      if (!tab) return;
+      var displayUrl = tab.url;
+      var localPrefix = 'http://127.0.0.1:' + API_PORT + '/file/';
+      if (displayUrl.startsWith(localPrefix)) {
+        var filePath = decodeURIComponent(displayUrl.replace(localPrefix, ''));
+        if (filePath.startsWith(samplesDir)) {
+          var name = path.basename(filePath, '.html');
+          displayUrl = 'nightmare://' + (name === 'hello' ? 'home' : name);
+        } else if (filePath.startsWith(pagesDir)) {
+          displayUrl = 'nightmare://' + path.basename(filePath, '.html');
+        } else {
+          displayUrl = filePath;
+        }
+      }
+      document.getElementById('nm-url-input').value = displayUrl;
+      var dotEl = document.getElementById('nm-zone-dot');
+      dotEl.style.background = ZONE_COLORS[tab.zone] || '#585a64';
+      dotEl.style.boxShadow = '0 0 6px ' + (ZONE_COLORS[tab.zone] || '#585a64');
+    }
+
+    function updateBanner() {
+      var tab = getActiveTab();
+      var banner = document.getElementById('nm-security-banner');
+      if (!tab) { banner.style.display = 'none'; return; }
+      var zone = tab.zone;
+      if (zone !== 'WEB' && dismissedBanners.has(tab.id)) {
+        banner.style.display = 'none';
+        return;
+      }
+      banner.style.display = 'flex';
+      banner.className = 'zone-' + ZONE_CSS[zone];
+      while (banner.firstChild) banner.removeChild(banner.firstChild);
+
+      var iconSpan = document.createElement('span');
+      iconSpan.className = 'nm-banner-icon';
+      iconSpan.textContent = zone === 'WEB' ? '\u26A0' : zone === 'LOCAL' ? '\u2714' : '\u2139';
+      banner.appendChild(iconSpan);
+
+      var msgSpan = document.createElement('span');
+      msgSpan.className = 'nm-banner-text';
+      msgSpan.textContent = ZONE_MSG[zone];
+      banner.appendChild(msgSpan);
+
+      if (zone !== 'WEB') {
+        var dismissBtn = document.createElement('button');
+        dismissBtn.className = 'nm-banner-dismiss';
+        dismissBtn.textContent = '\u2715';
+        dismissBtn.addEventListener('click', function() {
+          dismissedBanners.add(tab.id);
+          banner.style.display = 'none';
+        });
+        banner.appendChild(dismissBtn);
+      } else {
+        var permSpan = document.createElement('span');
+        permSpan.className = 'nm-banner-permanent';
+        permSpan.textContent = 'CANNOT BE DISMISSED';
+        banner.appendChild(permSpan);
+      }
+    }
+
+    function updateStatusBar() {
+      var tab = getActiveTab();
+      document.getElementById('nm-status-zone').textContent = tab ? 'Zone: ' + tab.zone : 'Ready';
+      document.getElementById('nm-status-node').textContent = 'Node ' + process.version;
+      document.getElementById('nm-status-tabs').textContent = tabs.size + ' tab' + (tabs.size !== 1 ? 's' : '');
+    }
+
+    function updateWindowTitle() {
+      var tab = getActiveTab();
+      var title = tab && tab.title ? tab.title + ' - Nightmare Browser' : 'Nightmare Browser';
+      document.getElementById('nm-window-title').textContent = title;
+      document.title = title;
+    }
+
+    setInterval(function() {
+      document.getElementById('nm-status-clock').textContent = new Date().toLocaleTimeString();
+    }, 1000);
+
+    // ---- Navigation ----
+    document.getElementById('nm-btn-back').addEventListener('click', function() {
+      var tab = getActiveTab();
+      if (tab) try { tab.frame.contentWindow.history.back(); } catch(e) {}
+    });
+    document.getElementById('nm-btn-forward').addEventListener('click', function() {
+      var tab = getActiveTab();
+      if (tab) try { tab.frame.contentWindow.history.forward(); } catch(e) {}
+    });
+    document.getElementById('nm-btn-reload').addEventListener('click', function() {
+      var tab = getActiveTab();
+      if (tab) tab.frame.src = tab.url;
+    });
+    document.getElementById('nm-btn-home').addEventListener('click', function() {
+      var tab = getActiveTab();
+      if (tab) {
+        var url = resolveUrl(HOME_URL);
+        tab.url = url;
+        tab.zone = classifyZone(url);
+        tab.frame.src = url;
+        updateAll();
+      }
+    });
+
+    document.getElementById('nm-url-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        var tab = getActiveTab();
+        if (tab) {
+          var url = resolveUrl(this.value);
+          tab.url = url;
+          tab.zone = classifyZone(url);
+          tab.frame.src = url;
+          updateAll();
+        }
+        this.blur();
+      }
+    });
+
+    document.getElementById('nm-url-input').addEventListener('focus', function() {
+      this.select();
+    });
+
+    document.getElementById('nm-new-tab').addEventListener('click', function() { createTab(); });
+
+    // ---- Window controls ----
+    document.getElementById('nm-btn-minimize').addEventListener('click', function() { win.minimize(); });
+    document.getElementById('nm-btn-maximize').addEventListener('click', function() {
+      if (win.isMaximized) { win.unmaximize(); } else { win.maximize(); }
+    });
+    document.getElementById('nm-btn-close').addEventListener('click', function() { win.close(); });
+
+    // ---- Keyboard shortcuts ----
+    document.addEventListener('keydown', function(e) {
+      var ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === 't') { e.preventDefault(); createTab(); }
+      if (ctrl && e.key === 'w') { e.preventDefault(); if (activeTabId) closeTab(activeTabId); }
+      if (ctrl && e.key === 'l') { e.preventDefault(); var u = document.getElementById('nm-url-input'); u.focus(); u.select(); }
+      if (ctrl && e.key === 'r') { e.preventDefault(); var t = getActiveTab(); if (t) { t.frame.src = t.url; } }
+      if (e.key === 'F5') { e.preventDefault(); var t2 = getActiveTab(); if (t2) { t2.frame.src = t2.url; } }
+      if (e.key === 'F12') { e.preventDefault(); win.showDevTools(); }
+    });
+
+    // ---- Init ----
+    function initBrowser() {
+      renderBookmarks();
+      var startUrl = null;
+      process.argv.forEach(function(a) {
+        if (a.startsWith('--url=')) startUrl = a.replace('--url=', '');
+      });
+      createTab(startUrl || HOME_URL);
+      console.log('[Nightmare] Browser initialized');
+    }
+  </script>
 </body>
 </html>

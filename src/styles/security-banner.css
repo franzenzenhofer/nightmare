@@ -1,3 +1,4 @@
+/* ---- Security Banner Base ---- */
 #nm-security-banner {
   display: none;
   align-items: center;
@@ -6,6 +7,9 @@
   padding: 0 var(--nm-space-3);
   font-size: var(--nm-text-xs);
   font-family: var(--nm-font-mono);
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
   border-bottom: 1px solid;
 }
 
@@ -13,24 +17,80 @@
   display: flex;
 }
 
+/* ---- LOCAL zone: calm green ---- */
 #nm-security-banner.zone-local {
   background: var(--nm-zone-local-bg);
   color: var(--nm-zone-local-fg);
   border-color: var(--nm-zone-local-border);
 }
 
+/* ---- LOCALHOST zone: calm blue ---- */
 #nm-security-banner.zone-localhost {
   background: var(--nm-zone-localhost-bg);
   color: var(--nm-zone-localhost-fg);
   border-color: var(--nm-zone-localhost-border);
 }
 
+/* ---- WEB zone: AGGRESSIVE RED DANGER ---- */
 #nm-security-banner.zone-web {
   background: var(--nm-zone-web-bg);
-  color: var(--nm-zone-web-fg);
+  color: #ff1111;
   border-color: var(--nm-zone-web-border);
+  text-shadow: 0 0 8px rgba(255, 0, 0, 0.6);
+  box-shadow:
+    inset 0 0 30px rgba(255, 0, 0, 0.08),
+    0 2px 12px rgba(255, 0, 0, 0.15);
+  animation: webBannerFlash 0.5s ease-in-out 6;
 }
 
+/* Flash animation: runs 6 times (3 seconds) then stops */
+@keyframes webBannerFlash {
+  0%, 100% {
+    background: var(--nm-zone-web-bg);
+    box-shadow:
+      inset 0 0 30px rgba(255, 0, 0, 0.08),
+      0 2px 12px rgba(255, 0, 0, 0.15);
+  }
+  50% {
+    background: #5a0000;
+    box-shadow:
+      inset 0 0 60px rgba(255, 0, 0, 0.2),
+      0 2px 20px rgba(255, 0, 0, 0.4);
+  }
+}
+
+/* Persistent pulsing glow after flash stops */
+#nm-security-banner.zone-web::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg,
+    rgba(255, 0, 0, 0.05),
+    rgba(255, 0, 0, 0.12),
+    rgba(255, 0, 0, 0.05));
+  animation: webPulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes webPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* Danger icon */
+#nm-security-banner.zone-web .nm-banner-icon::before {
+  content: '';
+  display: inline-block;
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #ff1111;
+  margin-right: 4px;
+  vertical-align: middle;
+  filter: drop-shadow(0 0 4px rgba(255, 0, 0, 0.6));
+}
+
+/* ---- Icons ---- */
 #nm-security-banner .nm-banner-icon {
   font-size: 14px;
   flex-shrink: 0;
@@ -41,21 +101,36 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
+  z-index: 1;
 }
 
+/* ---- Dismiss button (LOCAL + LOCALHOST only) ---- */
 #nm-security-banner .nm-banner-dismiss {
-  width: 18px; height: 18px;
+  width: 20px; height: 20px;
   display: flex; align-items: center; justify-content: center;
   background: none; border: none;
   color: inherit;
   opacity: 0.6;
   cursor: pointer;
   border-radius: var(--nm-radius-sm);
-  font-size: 12px;
+  font-size: 13px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
 #nm-security-banner .nm-banner-dismiss:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---- Permanent label (WEB zone - cannot dismiss) ---- */
+#nm-security-banner .nm-banner-permanent {
+  font-size: 9px;
+  opacity: 0.7;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }

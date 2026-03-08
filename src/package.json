@@ -1,0 +1,16 @@
+{
+  "name": "nightmare-browser",
+  "main": "browser/index.html",
+  "window": {
+    "title": "Nightmare",
+    "width": 1280,
+    "height": 800,
+    "min_width": 800,
+    "min_height": 600,
+    "frame": false,
+    "icon": "assets/icons/nightmare.svg"
+  },
+  "chromium-args": "--enable-logging",
+  "node-remote": "<all_urls>",
+  "nodejs": true
+}

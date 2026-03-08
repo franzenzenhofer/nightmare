@@ -29,5 +29,10 @@
     "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
   },
-  "dependencies": {}
+  "dependencies": {
+    "nw": "^0.109.0"
+  },
+  "trustedDependencies": [
+    "nw"
+  ]
 }

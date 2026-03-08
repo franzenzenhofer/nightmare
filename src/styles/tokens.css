@@ -1,48 +1,67 @@
 :root {
-  --nm-bg-primary: #08080d;
-  --nm-bg-secondary: #0f1118;
-  --nm-bg-tertiary: #161822;
-  --nm-bg-hover: #1c1f2e;
-  --nm-bg-active: #242838;
-  --nm-bg-input: #0c0e16;
-  --nm-tab-bg: #0c0e16;
-  --nm-tab-active-bg: #161822;
-  --nm-tab-hover-bg: #12141e;
-  --nm-tab-border: #1e2030;
+  /* ---- Stranger Things Dark: deep void blacks + neon red accents ---- */
+  --nm-bg-primary: #050508;
+  --nm-bg-secondary: #0a0c14;
+  --nm-bg-tertiary: #10131f;
+  --nm-bg-hover: #181c2e;
+  --nm-bg-active: #1e2438;
+  --nm-bg-input: #08090f;
+  --nm-tab-bg: #08090f;
+  --nm-tab-active-bg: #10131f;
+  --nm-tab-hover-bg: #0e1020;
+  --nm-tab-border: #1a1d2e;
+
+  /* ---- Accent: Stranger Things red ---- */
   --nm-accent: #e63946;
   --nm-accent-dim: #8b1a22;
-  --nm-accent-glow: rgba(230, 57, 70, 0.12);
-  --nm-zone-local-bg: #0d2818;
+  --nm-accent-glow: rgba(230, 57, 70, 0.15);
+  --nm-accent-bright: #ff4757;
+
+  /* ---- Security Zones ---- */
+  --nm-zone-local-bg: #0a1f12;
   --nm-zone-local-fg: #4ade80;
   --nm-zone-local-border: #166534;
-  --nm-zone-localhost-bg: #0c1929;
+  --nm-zone-localhost-bg: #081428;
   --nm-zone-localhost-fg: #60a5fa;
   --nm-zone-localhost-border: #1e3a5f;
-  --nm-zone-web-bg: #2a0a0a;
-  --nm-zone-web-fg: #fca5a5;
-  --nm-zone-web-border: #991b1b;
-  --nm-text-primary: #e8e6e3;
-  --nm-text-secondary: #8b8d93;
-  --nm-text-muted: #52545c;
-  --nm-text-url: #e8e6e3;
+  --nm-zone-web-bg: #3a0808;
+  --nm-zone-web-fg: #ff3333;
+  --nm-zone-web-border: #cc0000;
+  --nm-zone-web-glow: rgba(255, 0, 0, 0.3);
+
+  /* ---- Text: higher contrast ---- */
+  --nm-text-primary: #f0eeeb;
+  --nm-text-secondary: #9a9ca3;
+  --nm-text-muted: #585a64;
+  --nm-text-url: #f0eeeb;
   --nm-text-url-host: #ffffff;
-  --nm-text-url-path: #8b8d93;
+  --nm-text-url-path: #9a9ca3;
+
+  /* ---- Fonts ---- */
   --nm-font-ui: 'Geist', system-ui, sans-serif;
   --nm-font-mono: 'JetBrains Mono', 'Cascadia Code', monospace;
   --nm-font-url: 'Geist Mono', 'JetBrains Mono', monospace;
+
+  /* ---- Layout ---- */
   --nm-titlebar-h: 32px;
   --nm-tabbar-h: 36px;
   --nm-navbar-h: 40px;
   --nm-bookmarkbar-h: 28px;
-  --nm-banner-h: 28px;
-  --nm-statusbar-h: 22px;
+  --nm-banner-h: 36px;
+  --nm-statusbar-h: 24px;
+
+  /* ---- Spacing ---- */
   --nm-space-1: 4px;
   --nm-space-2: 8px;
   --nm-space-3: 12px;
   --nm-space-4: 16px;
+
+  /* ---- Text sizes ---- */
   --nm-text-xs: 11px;
   --nm-text-sm: 12px;
   --nm-text-base: 13px;
+
+  /* ---- Radii ---- */
   --nm-radius-sm: 4px;
   --nm-radius-md: 8px;
   --nm-radius-full: 9999px;
