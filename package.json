@@ -5,9 +5,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nw src/ --devtools",
+    "dev": "node scripts/patch-nwjs.js && nw src/ --devtools",
+    "postinstall": "node scripts/patch-nwjs.js",
     "dev:headless": "nw src/ --headless",
     "build": "tsc",
+    "build:mac": "npx nw-builder --platforms osx --arch x64,arm64 --buildDir dist/ src/",
+    "build:win": "npx nw-builder --platforms win --arch x64 --buildDir dist/ src/",
+    "build:linux": "npx nw-builder --platforms linux --arch x64 --buildDir dist/ src/",
+    "build:all": "npx nw-builder --platforms osx,win,linux --arch x64 --buildDir dist/ src/",
     "typecheck": "tsc --noEmit",
     "lint": "eslint 'src/**/*.ts' --max-warnings 0",
     "lint:fix": "eslint 'src/**/*.ts' --fix",
@@ -16,7 +21,8 @@
     "test:ui": "npx vitest --ui",
     "check": "npm run typecheck && npm run lint && npm run test",
     "format": "prettier --write 'src/**/*.ts'",
-    "format:check": "prettier --check 'src/**/*.ts'"
+    "format:check": "prettier --check 'src/**/*.ts'",
+    "icons": "node scripts/generate-icons.js"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",
@@ -24,6 +30,7 @@
     "@typescript-eslint/parser": "^8.56.1",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.3",
+    "nw-builder": "^4.17.5",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",

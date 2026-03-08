@@ -61,6 +61,16 @@
   padding-left: calc(var(--nm-space-2) + 8px + var(--nm-space-2));
 }
 
+#nm-btn-devtools {
+  font-size: 14px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+#nm-btn-devtools:hover {
+  opacity: 1;
+}
+
 .nm-nav-separator {
   width: 1px;
   height: 16px;

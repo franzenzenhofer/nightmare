@@ -7,11 +7,15 @@ export class TabManager {
   private activeTabId: string | null = null;
   private readonly securityZones = new SecurityZones();
 
-  createTab(url?: string): Tab {
-    const tab = createTab(url);
+  createTab(url?: string, openerId?: string): Tab {
+    const tab = createTab(url, openerId);
     this.tabs.set(tab.id, tab);
     this.activeTabId = tab.id;
     return tab;
+  }
+
+  hasTab(id: string): boolean {
+    return this.tabs.has(id);
   }
 
   closeTab(id: string): void {

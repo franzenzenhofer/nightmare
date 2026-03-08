@@ -11,6 +11,7 @@ export interface Tab {
   canGoForward: boolean;
   zone: SecurityZone;
   readonly webviewId: string;
+  readonly openerId: string | undefined;
   muted: boolean;
   pinned: boolean;
   readonly createdAt: number;
@@ -18,7 +19,7 @@ export interface Tab {
 
 const securityZones = new SecurityZones();
 
-export function createTab(url: string = 'nightmare://newtab'): Tab {
+export function createTab(url: string = 'nightmare://newtab', openerId?: string): Tab {
   const id = crypto.randomUUID();
   return {
     id,
@@ -30,6 +31,7 @@ export function createTab(url: string = 'nightmare://newtab'): Tab {
     canGoForward: false,
     zone: securityZones.classify(url),
     webviewId: `webview-${id}`,
+    openerId,
     muted: false,
     pinned: false,
     createdAt: Date.now(),

@@ -44,6 +44,7 @@
       <input id="nm-url-input" class="nm-url-bar" type="text"
              placeholder="Search or enter URL..." spellcheck="false">
       <button id="nm-btn-bookmark" title="Bookmark this page">&#x2606;</button>
+      <button id="nm-btn-devtools" title="Developer Tools (F12)">&#x1F6E0;</button>
     </div>
 
     <div id="nm-bookmarks-bar"></div>
@@ -77,6 +78,7 @@
 
     var path = require('path');
     var http = require('http');
+    var https = require('https');
     var fs = require('fs');
     var os = require('os');
     console.log('[Nightmare] Modules loaded, win:', !!win);
@@ -87,6 +89,7 @@
     var tabCounter = 0;
     var dismissedBanners = new Set();
     var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
+    var navState = new Map(); // tabId -> { depth, forwardDepth, openerId, lastUrl, isBackForward }
 
     // NW.js inline scripts don't have __dirname — derive paths from process.cwd()
     var _srcDir = process.cwd();
@@ -107,10 +110,19 @@
     console.log('[Nightmare] samplesDir:', samplesDir);
     console.log('[Nightmare] pagesDir:', pagesDir);
 
-    // ---- Execute JS in a frame context safely ----
-    function executeInFrame(frame, code) {
-      var fn = new frame.contentWindow.Function(code);
-      return fn();
+    // ---- Execute JS in a frame context ----
+    // This is intentionally using eval() in the frame's context.
+    // Nightmare Browser's core feature is executing arbitrary JS in any tab via API.
+    // This is the entire point of the browser — AI agents need to run JS in web pages.
+    // eval() is used instead of new Function() because eval returns the last expression value.
+    function executeInFrame(frame, code, cb) {
+      try {
+        var result = frame.contentWindow.eval(code);
+        if (cb) cb(null, result);
+        return result;
+      } catch(e) {
+        if (cb) cb(e, undefined);
+      }
     }
 
     // ---- Unified server: API + local file serving on single port ----
@@ -118,8 +130,34 @@
       return 'http://127.0.0.1:' + API_PORT + '/file/' + encodeURIComponent(filePath);
     }
 
+    function proxyUrl(webUrl) {
+      return 'http://127.0.0.1:' + API_PORT + '/proxy/' + encodeURIComponent(webUrl);
+    }
+
+    function toDisplayUrl(internalUrl) {
+      var filePrefix = 'http://127.0.0.1:' + API_PORT + '/file/';
+      var proxyPrefix = 'http://127.0.0.1:' + API_PORT + '/proxy/';
+      // Proxy URL: show the original external URL
+      if (internalUrl.startsWith(proxyPrefix)) {
+        return decodeURIComponent(internalUrl.slice(proxyPrefix.length));
+      }
+      // File URL: show nightmare:// scheme
+      if (internalUrl.startsWith(filePrefix)) {
+        var filePath = decodeURIComponent(internalUrl.slice(filePrefix.length));
+        if (filePath.startsWith(samplesDir)) {
+          var name = path.basename(filePath, '.html');
+          return 'nightmare://' + (name === 'hello' ? 'home' : name);
+        }
+        if (filePath.startsWith(pagesDir)) {
+          return 'nightmare://' + path.basename(filePath, '.html');
+        }
+        return 'nightmare://' + filePath;
+      }
+      return internalUrl;
+    }
+
     function tabToJson(t) {
-      return { id: t.id, url: t.url, title: t.title, zone: t.zone };
+      return { id: t.id, url: t.url, displayUrl: toDisplayUrl(t.url), title: t.title, zone: t.zone };
     }
 
     function serveMimeType(ext) {
@@ -139,6 +177,92 @@
       return m[ext] || 'application/octet-stream';
     }
 
+    // ---- Minimal Markdown to HTML renderer ----
+    function renderMarkdown(md) {
+      var lines = md.split('\n');
+      var html = [];
+      var inCode = false;
+      var inList = false;
+      var listType = '';
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+
+        // Fenced code blocks
+        if (line.trim().startsWith('```')) {
+          if (inCode) { html.push('</code></pre>'); inCode = false; }
+          else { html.push('<pre><code>'); inCode = true; }
+          continue;
+        }
+        if (inCode) { html.push(escapeHtml(line) + '\n'); continue; }
+
+        // Close list if non-list line
+        if (inList && !line.match(/^\s*[-*+]\s/) && !line.match(/^\s*\d+\.\s/) && line.trim() !== '') {
+          html.push(listType === 'ul' ? '</ul>' : '</ol>');
+          inList = false;
+        }
+
+        // Headings
+        var hMatch = line.match(/^(#{1,6})\s+(.*)$/);
+        if (hMatch) { var lv = hMatch[1].length; html.push('<h' + lv + '>' + inlineFormat(hMatch[2]) + '</h' + lv + '>'); continue; }
+
+        // HR
+        if (/^(-{3,}|_{3,}|\*{3,})\s*$/.test(line.trim())) { html.push('<hr>'); continue; }
+
+        // Blockquote
+        if (line.startsWith('> ')) { html.push('<blockquote>' + inlineFormat(line.slice(2)) + '</blockquote>'); continue; }
+
+        // Unordered list
+        var ulMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+        if (ulMatch) {
+          if (!inList || listType !== 'ul') { if (inList) html.push('</ol>'); html.push('<ul>'); inList = true; listType = 'ul'; }
+          html.push('<li>' + inlineFormat(ulMatch[1]) + '</li>');
+          continue;
+        }
+
+        // Ordered list
+        var olMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+        if (olMatch) {
+          if (!inList || listType !== 'ol') { if (inList) html.push('</ul>'); html.push('<ol>'); inList = true; listType = 'ol'; }
+          html.push('<li>' + inlineFormat(olMatch[1]) + '</li>');
+          continue;
+        }
+
+        // Empty line = paragraph break
+        if (line.trim() === '') { html.push('<br>'); continue; }
+
+        // Regular paragraph
+        html.push('<p>' + inlineFormat(line) + '</p>');
+      }
+
+      if (inCode) html.push('</code></pre>');
+      if (inList) html.push(listType === 'ul' ? '</ul>' : '</ol>');
+      return html.join('\n');
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function inlineFormat(s) {
+      s = escapeHtml(s);
+      // Images
+      s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+      // Links
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+      // Bold
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      // Italic
+      s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+      // Inline code
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Strikethrough
+      s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+      return s;
+    }
+
     var server = http.createServer(function(req, res) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, PUT, PATCH, OPTIONS');
@@ -148,6 +272,21 @@
 
       var url = req.url || '/';
 
+      // ---- Static assets: /styles/*, /assets/*, /pages/* resolve relative to _srcDir ----
+      if (url.startsWith('/styles/') || url.startsWith('/assets/') || url.startsWith('/pages/')) {
+        var staticPath = path.join(_srcDir, url);
+        try {
+          var staticContent = fs.readFileSync(staticPath);
+          var staticExt = path.extname(staticPath).toLowerCase();
+          res.writeHead(200, { 'Content-Type': serveMimeType(staticExt) });
+          res.end(staticContent);
+        } catch(e) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('Not found: ' + url);
+        }
+        return;
+      }
+
       // ---- Local file serving: /file/<encoded-path> ----
       if (url.startsWith('/file/')) {
         var filePath = decodeURIComponent(url.substring(6));
@@ -155,12 +294,85 @@
           var resolved = path.resolve(filePath);
           var content = fs.readFileSync(resolved);
           var ext = path.extname(resolved).toLowerCase();
+
+          // Render .md files as styled HTML
+          if (ext === '.md') {
+            var mdText = content.toString('utf-8');
+            var htmlBody = renderMarkdown(mdText);
+            var fileName = path.basename(resolved);
+            var mdHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + fileName + '</title>' +
+              '<style>' +
+              'body{background:#0a0a14;color:#c8c8d8;font-family:"Cascadia Code","JetBrains Mono","Fira Code",monospace;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.7;}' +
+              'h1,h2,h3,h4,h5,h6{color:#ff4444;border-bottom:1px solid #1a1a2e;padding-bottom:8px;margin-top:32px;}' +
+              'h1{font-size:1.8em;}h2{font-size:1.4em;}h3{font-size:1.2em;}' +
+              'a{color:#60a5fa;text-decoration:none;}a:hover{text-decoration:underline;}' +
+              'code{background:#1a1a2e;color:#4ade80;padding:2px 6px;border-radius:3px;font-size:0.9em;}' +
+              'pre{background:#1a1a2e;padding:16px;border-radius:6px;overflow-x:auto;border:1px solid #333;}' +
+              'pre code{background:none;padding:0;}' +
+              'blockquote{border-left:3px solid #ff4444;margin-left:0;padding-left:16px;color:#888;}' +
+              'img{max-width:100%;border-radius:6px;}' +
+              'table{border-collapse:collapse;width:100%;}th,td{border:1px solid #333;padding:8px 12px;text-align:left;}th{background:#1a1a2e;}' +
+              'hr{border:none;border-top:1px solid #333;margin:24px 0;}' +
+              'ul,ol{padding-left:24px;}li{margin:4px 0;}' +
+              '.nm-md-meta{color:#585a64;font-size:0.85em;border-bottom:1px solid #1a1a2e;padding-bottom:12px;margin-bottom:24px;}' +
+              '</style></head><body>' +
+              '<div class="nm-md-meta">nightmare://' + fileName + ' ─ ' + resolved + '</div>' +
+              htmlBody + '</body></html>';
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(mdHtml);
+            return;
+          }
+
           res.writeHead(200, { 'Content-Type': serveMimeType(ext) });
           res.end(content);
         } catch(e) {
           res.writeHead(404, { 'Content-Type': 'text/plain' });
           res.end('File not found: ' + filePath);
         }
+        return;
+      }
+
+      // ---- Reverse proxy: /proxy/<encoded-url> — strips X-Frame-Options, injects <base> for relative URLs ----
+      if (url.startsWith('/proxy/')) {
+        var targetUrl = decodeURIComponent(url.substring(7));
+        var proto = targetUrl.startsWith('https') ? https : http;
+        proto.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Nightmare/1.0' } }, function(proxyRes) {
+          var chunks = [];
+          proxyRes.on('data', function(c) { chunks.push(c); });
+          proxyRes.on('end', function() {
+            var body = Buffer.concat(chunks);
+            // Forward headers but strip X-Frame-Options and CSP
+            var headers = {};
+            Object.keys(proxyRes.headers).forEach(function(h) {
+              var lower = h.toLowerCase();
+              if (lower !== 'x-frame-options' && lower !== 'content-security-policy' && lower !== 'content-security-policy-report-only') {
+                headers[h] = proxyRes.headers[h];
+              }
+            });
+            // Inject <base> tag so relative URLs resolve correctly
+            var ct = (headers['content-type'] || '').toLowerCase();
+            if (ct.includes('text/html')) {
+              var html = body.toString('utf-8');
+              var baseUrl = targetUrl.replace(/[?#].*/, '');
+              var baseTag = '<base href="' + baseUrl + '">';
+              if (html.includes('<head>')) {
+                html = html.replace('<head>', '<head>' + baseTag);
+              } else if (html.includes('<HEAD>')) {
+                html = html.replace('<HEAD>', '<HEAD>' + baseTag);
+              } else {
+                html = baseTag + html;
+              }
+              body = Buffer.from(html, 'utf-8');
+              // Update content-length
+              headers['content-length'] = String(body.length);
+            }
+            res.writeHead(proxyRes.statusCode || 200, headers);
+            res.end(body);
+          });
+        }).on('error', function(e) {
+          res.writeHead(502, { 'Content-Type': 'text/plain' });
+          res.end('Proxy error: ' + e.message);
+        });
         return;
       }
 
@@ -263,14 +475,11 @@
       if (htmlMatch && req.method === 'GET') {
         var ht = tabs.get(htmlMatch[1]);
         if (!ht) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        try {
-          var htmlContent = ht.frame.contentDocument.documentElement.outerHTML;
+        executeInFrame(ht.frame, 'document.documentElement.outerHTML', function(err, htmlContent) {
           res.writeHead(200);
-          res.end(JSON.stringify({ tabId: ht.id, html: htmlContent }));
-        } catch(e) {
-          res.writeHead(200);
-          res.end(JSON.stringify({ tabId: ht.id, html: null, error: 'Cross-origin: cannot read HTML' }));
-        }
+          if (err) { res.end(JSON.stringify({ tabId: ht.id, html: null, error: 'Cross-origin: cannot read HTML' })); }
+          else { res.end(JSON.stringify({ tabId: ht.id, html: htmlContent })); }
+        });
         return;
       }
 
@@ -283,15 +492,228 @@
           try { eparsed = JSON.parse(ebody); } catch(e) {}
           var et = tabs.get(execMatch[1]);
           if (!et) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          try {
-            var result = executeInFrame(et.frame, eparsed.code);
+          executeInFrame(et.frame, eparsed.code, function(err, result) {
             res.writeHead(200);
-            res.end(JSON.stringify({ tabId: et.id, result: String(result) }));
-          } catch(e) {
-            res.writeHead(200);
-            res.end(JSON.stringify({ tabId: et.id, error: e.message }));
-          }
+            if (err) { res.end(JSON.stringify({ tabId: et.id, error: err.message })); }
+            else { res.end(JSON.stringify({ tabId: et.id, result: String(result) })); }
+          });
         });
+        return;
+      }
+
+      // ---- Screenshot: full browser window ----
+      var screenshotMatch = url.match(/^\/api\/screenshot(\?.*)?$/);
+      if (screenshotMatch && req.method === 'GET') {
+        if (!win) { res.writeHead(500); res.end(JSON.stringify({error:'No window handle'})); return; }
+        var params = new URLSearchParams(url.split('?')[1] || '');
+        var sWidth = parseInt(params.get('width') || '0', 10);
+        var sHeight = parseInt(params.get('height') || '0', 10);
+        var sFormat = params.get('format') === 'jpeg' ? 'jpeg' : 'png';
+
+        var doCapture = function() {
+          win.capturePage(function(buffer) {
+            var base64 = buffer.toString('base64');
+            res.writeHead(200);
+            res.end(JSON.stringify({ format: sFormat, width: sWidth || null, height: sHeight || null, data: base64 }));
+          }, { format: sFormat, datatype: 'buffer' });
+        };
+
+        if (sWidth > 0 && sHeight > 0) {
+          var origW = win.width; var origH = win.height;
+          win.resizeTo(sWidth, sHeight);
+          setTimeout(function() {
+            doCapture();
+            win.resizeTo(origW, origH);
+          }, 300);
+        } else {
+          doCapture();
+        }
+        return;
+      }
+
+      // ---- Per-tab screenshot ----
+      var tabScreenshotMatch = url.match(/^\/api\/tabs\/([^/]+)\/screenshot$/);
+      if (tabScreenshotMatch && req.method === 'GET') {
+        var sst = tabs.get(tabScreenshotMatch[1]);
+        if (!sst) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        try {
+          var canvas = document.createElement('canvas');
+          var frameDoc = sst.frame.contentDocument;
+          var frameWin = sst.frame.contentWindow;
+          var w = frameDoc.documentElement.scrollWidth;
+          var h = frameDoc.documentElement.scrollHeight;
+          canvas.width = w; canvas.height = h;
+          // Use html2canvas-style approach via frame capture
+          // NW.js doesn't support per-frame capture directly, use executeInFrame
+          res.writeHead(200);
+          res.end(JSON.stringify({ tabId: sst.id, width: w, height: h, note: 'Use GET /api/screenshot for full window capture. Per-tab capture requires activating the tab first.' }));
+        } catch(e) {
+          res.writeHead(200);
+          res.end(JSON.stringify({ tabId: sst.id, error: 'Cross-origin or capture error: ' + e.message }));
+        }
+        return;
+      }
+
+      // ---- Resize browser window ----
+      var resizeMatch = url.match(/^\/api\/resize(\?.*)?$/);
+      if (resizeMatch && req.method === 'POST') {
+        if (!win) { res.writeHead(500); res.end(JSON.stringify({error:'No window handle'})); return; }
+        var rbody = '';
+        req.on('data', function(c) { rbody += c; });
+        req.on('end', function() {
+          var rparsed = {};
+          try { rparsed = JSON.parse(rbody); } catch(e) {}
+          var rw = rparsed.width || 1280;
+          var rh = rparsed.height || 800;
+          win.resizeTo(rw, rh);
+          res.writeHead(200);
+          res.end(JSON.stringify({ width: rw, height: rh }));
+        });
+        return;
+      }
+
+      // ---- Click element by selector ----
+      var clickMatch = url.match(/^\/api\/tabs\/([^/]+)\/click$/);
+      if (clickMatch && req.method === 'POST') {
+        var cbody = '';
+        req.on('data', function(c) { cbody += c; });
+        req.on('end', function() {
+          var cparsed = {};
+          try { cparsed = JSON.parse(cbody); } catch(e) {}
+          var ct = tabs.get(clickMatch[1]);
+          if (!ct) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+          var clickCode = 'var el = document.querySelector(' + JSON.stringify(cparsed.selector) + '); if (el) { el.click(); "clicked" } else { "not_found" }';
+          executeInFrame(ct.frame, clickCode, function(err, clickResult) {
+            res.writeHead(200);
+            if (err) { res.end(JSON.stringify({ tabId: ct.id, error: err.message })); }
+            else { res.end(JSON.stringify({ tabId: ct.id, selector: cparsed.selector, result: clickResult })); }
+          });
+        });
+        return;
+      }
+
+      // ---- Type text into element ----
+      var typeMatch = url.match(/^\/api\/tabs\/([^/]+)\/type$/);
+      if (typeMatch && req.method === 'POST') {
+        var tbody = '';
+        req.on('data', function(c) { tbody += c; });
+        req.on('end', function() {
+          var tparsed = {};
+          try { tparsed = JSON.parse(tbody); } catch(e) {}
+          var tt = tabs.get(typeMatch[1]);
+          if (!tt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+          var typeCode = 'var el = document.querySelector(' + JSON.stringify(tparsed.selector) + '); if (el) { el.focus();' +
+            (tparsed.clear ? ' el.value = "";' : '') +
+            ' el.value += ' + JSON.stringify(tparsed.text || '') + ';' +
+            ' el.dispatchEvent(new Event("input", {bubbles:true}));' +
+            ' el.dispatchEvent(new Event("change", {bubbles:true}));' +
+            ' "typed" } else { "not_found" }';
+          executeInFrame(tt.frame, typeCode, function(err, typeResult) {
+            res.writeHead(200);
+            if (err) { res.end(JSON.stringify({ tabId: tt.id, error: err.message })); }
+            else { res.end(JSON.stringify({ tabId: tt.id, selector: tparsed.selector, result: typeResult })); }
+          });
+        });
+        return;
+      }
+
+      // ---- Find elements by selector (querySelector/querySelectorAll) ----
+      var findMatch = url.match(/^\/api\/tabs\/([^/]+)\/find$/);
+      if (findMatch && req.method === 'POST') {
+        var fbody = '';
+        req.on('data', function(c) { fbody += c; });
+        req.on('end', function() {
+          var fparsed = {};
+          try { fparsed = JSON.parse(fbody); } catch(e) {}
+          var ft = tabs.get(findMatch[1]);
+          if (!ft) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+          var findCode = '(function() { var els = document.querySelectorAll(' + JSON.stringify(fparsed.selector) + ');' +
+            ' return JSON.stringify(Array.from(els).slice(0, ' + (fparsed.limit || 50) + ').map(function(el) {' +
+            '   var rect = el.getBoundingClientRect();' +
+            '   var attrs = {};' +
+            '   for (var i = 0; i < el.attributes.length; i++) { attrs[el.attributes[i].name] = el.attributes[i].value; }' +
+            '   return { tag: el.tagName, text: (el.textContent || "").substring(0, 200), id: el.id, className: el.className,' +
+            '     href: el.href || null, src: el.src || null, value: el.value || null,' +
+            '     visible: rect.width > 0 && rect.height > 0,' +
+            '     rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height }, attrs: attrs };' +
+            ' })); })()';
+          executeInFrame(ft.frame, findCode, function(err, findResult) {
+            res.writeHead(200);
+            if (err) { res.end(JSON.stringify({ tabId: ft.id, error: err.message })); }
+            else {
+              try { res.end(JSON.stringify({ tabId: ft.id, selector: fparsed.selector, elements: JSON.parse(findResult) })); }
+              catch(pe) { res.end(JSON.stringify({ tabId: ft.id, selector: fparsed.selector, elements: [], error: 'Parse error' })); }
+            }
+          });
+        });
+        return;
+      }
+
+      // ---- Scroll in tab ----
+      var scrollMatch = url.match(/^\/api\/tabs\/([^/]+)\/scroll$/);
+      if (scrollMatch && req.method === 'POST') {
+        var sbody = '';
+        req.on('data', function(c) { sbody += c; });
+        req.on('end', function() {
+          var sparsed = {};
+          try { sparsed = JSON.parse(sbody); } catch(e) {}
+          var st = tabs.get(scrollMatch[1]);
+          if (!st) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+          var scrollCode;
+          if (sparsed.selector) {
+            scrollCode = 'var el = document.querySelector(' + JSON.stringify(sparsed.selector) + '); if (el) { el.scrollIntoView({behavior:"smooth",block:"center"}); "scrolled" } else { "not_found" }';
+          } else {
+            scrollCode = 'window.scrollTo(' + (sparsed.x || 0) + ',' + (sparsed.y || 0) + '); "scrolled"';
+          }
+          executeInFrame(st.frame, scrollCode, function(err, scrollResult) {
+            res.writeHead(200);
+            if (err) { res.end(JSON.stringify({ tabId: st.id, error: err.message })); }
+            else { res.end(JSON.stringify({ tabId: st.id, result: scrollResult })); }
+          });
+        });
+        return;
+      }
+
+      // ---- Get page text content ----
+      var textMatch = url.match(/^\/api\/tabs\/([^/]+)\/text$/);
+      if (textMatch && req.method === 'GET') {
+        var txtt = tabs.get(textMatch[1]);
+        if (!txtt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        var textCode = 'document.body ? document.body.innerText : ""';
+        executeInFrame(txtt.frame, textCode, function(err, textResult) {
+          res.writeHead(200);
+          if (err) { res.end(JSON.stringify({ tabId: txtt.id, error: err.message })); }
+          else { res.end(JSON.stringify({ tabId: txtt.id, text: textResult })); }
+        });
+        return;
+      }
+
+      // ---- Back/Forward/Reload via API ----
+      var backMatch = url.match(/^\/api\/tabs\/([^/]+)\/back$/);
+      if (backMatch && req.method === 'POST') {
+        var bt = tabs.get(backMatch[1]);
+        if (!bt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        var bstate = navState.get(bt.id);
+        if (bstate && bstate.depth > 0) {
+          bstate.isBackForward = true; bstate.depth--; bstate.forwardDepth++;
+          try { bt.frame.contentWindow.history.back(); } catch(e) {}
+        }
+        res.writeHead(200);
+        res.end(JSON.stringify(tabToJson(bt)));
+        return;
+      }
+
+      var fwdMatch = url.match(/^\/api\/tabs\/([^/]+)\/forward$/);
+      if (fwdMatch && req.method === 'POST') {
+        var fwdt = tabs.get(fwdMatch[1]);
+        if (!fwdt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        var fstate = navState.get(fwdt.id);
+        if (fstate && fstate.forwardDepth > 0) {
+          fstate.isBackForward = true; fstate.depth++; fstate.forwardDepth--;
+          try { fwdt.frame.contentWindow.history.forward(); } catch(e) {}
+        }
+        res.writeHead(200);
+        res.end(JSON.stringify(tabToJson(fwdt)));
         return;
       }
 
@@ -308,7 +730,13 @@
         'GET /api/tabs/:id', 'DELETE /api/tabs/:id',
         'POST /api/tabs/:id/navigate', 'POST /api/tabs/:id/reload',
         'POST /api/tabs/:id/activate', 'GET /api/tabs/:id/html',
-        'POST /api/tabs/:id/execute', 'POST /api/shutdown'
+        'POST /api/tabs/:id/execute', 'GET /api/tabs/:id/text',
+        'GET /api/tabs/:id/screenshot',
+        'POST /api/tabs/:id/click', 'POST /api/tabs/:id/type',
+        'POST /api/tabs/:id/find', 'POST /api/tabs/:id/scroll',
+        'POST /api/tabs/:id/back', 'POST /api/tabs/:id/forward',
+        'GET /api/screenshot?width=W&height=H&format=png|jpeg',
+        'POST /api/resize', 'POST /api/shutdown'
       ]}));
     });
 
@@ -351,6 +779,9 @@
 
     // ---- Zone classification ----
     function classifyZone(url) {
+      // Proxy URLs are WEB zone
+      var proxyPrefix = 'http://127.0.0.1:' + API_PORT + '/proxy/';
+      if (url.startsWith(proxyPrefix)) return 'WEB';
       try {
         var parsed = new URL(url);
         if (parsed.protocol === 'file:') return 'LOCAL';
@@ -368,31 +799,51 @@
     var ZONE_COLORS = { LOCAL: '#4ade80', LOCALHOST: '#60a5fa', WEB: '#ff3333' };
     var ZONE_CSS = { LOCAL: 'local', LOCALHOST: 'localhost', WEB: 'web' };
     var ZONE_MSG = {
-      LOCAL: 'LOCAL FILE  //  Full Node.js access, no restrictions.',
-      LOCALHOST: 'LOCALHOST  //  Node.js enabled, no CORS restrictions.',
-      WEB: 'DANGER: OPEN WEB  //  ALL SECURITY DISABLED  //  Passwords, cookies, data NOT PROTECTED'
+      LOCAL: 'LOCAL FILE  //  Node.js active  //  Full system access',
+      LOCALHOST: 'LOCALHOST  //  Node.js active  //  Full system access',
+      WEB: 'THIS WEBSITE HAS FULL NODE.JS ACCESS  //  require() fs process child_process  //  NO SANDBOX'
     };
 
     // ---- URL resolution ----
     function resolveUrl(input) {
       if (!input) return resolveUrl(HOME_URL);
+      if (input.startsWith('nightmare:///')) {
+        var absPath = input.slice('nightmare://'.length);
+        return localFileUrl(absPath);
+      }
       if (input.startsWith('nightmare://')) {
         var pageName = input.replace('nightmare://', '');
         if (pageName === 'home') return localFileUrl(path.join(samplesDir, 'hello.html'));
+        // nightmare://about → show README.md
+        if (pageName === 'about') return localFileUrl(path.join(_projectDir, 'README.md'));
         var samplePath = path.join(samplesDir, pageName + '.html');
         if (fs.existsSync(samplePath)) return localFileUrl(samplePath);
         var pagePath = path.join(pagesDir, pageName + '.html');
         if (fs.existsSync(pagePath)) return localFileUrl(pagePath);
         return localFileUrl(path.join(pagesDir, 'newtab.html'));
       }
-      if (/^https?:\/\//.test(input) || input.startsWith('file://')) return input;
+      if (input.startsWith('file://')) return input;
+      // External web URLs: proxy through local server to strip X-Frame-Options
+      if (/^https?:\/\//.test(input)) {
+        var parsedHost = '';
+        try { parsedHost = new URL(input).hostname; } catch(e) {}
+        // Don't proxy localhost/local — only external WEB zone
+        if (parsedHost === 'localhost' || parsedHost === '127.0.0.1' || parsedHost === '[::1]' || parsedHost === '0.0.0.0'
+            || parsedHost.endsWith('.localhost')
+            || /^192\.168\.\d+\.\d+$/.test(parsedHost)
+            || /^10\.\d+\.\d+\.\d+$/.test(parsedHost)
+            || /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(parsedHost)) {
+          return input;
+        }
+        return proxyUrl(input);
+      }
       if (/^\d{2,5}$/.test(input)) return 'http://localhost:' + input;
       // File paths MUST be checked BEFORE the dot-in-domain heuristic
       if (input.startsWith('/') || input.startsWith('./') || input.startsWith('~')) {
         return localFileUrl(path.resolve(input.replace(/^~/, os.homedir())));
       }
-      if (input.includes('.') && !input.includes(' ') && !input.includes('/')) return 'https://' + input;
-      return 'https://www.google.com/search?q=' + encodeURIComponent(input);
+      if (input.includes('.') && !input.includes(' ') && !input.includes('/')) return proxyUrl('https://' + input);
+      return proxyUrl('https://www.google.com/search?q=' + encodeURIComponent(input));
     }
 
     // ---- Bookmarks ----
@@ -414,39 +865,27 @@
       tab.url = newUrl;
       tab.zone = newZone;
 
-      // If zone changed, we MUST recreate the iframe because nwfaketop/nwdisable
-      // attributes are only read at iframe creation time in NW.js
-      if (oldZone !== newZone || (oldZone === 'WEB' && newZone !== 'WEB') || (oldZone !== 'WEB' && newZone === 'WEB')) {
+      // All zones use iframe + nwfaketop (full Node.js). Recreate only on zone change
+      // because nwfaketop is read-once at iframe creation.
+      if (oldZone !== newZone) {
         var wasActive = tab.frame.classList.contains('active');
         var parent = tab.frame.parentNode;
+        var oldId = tab.frame.id;
         tab.frame.remove();
 
         var newFrame = document.createElement('iframe');
-        newFrame.id = tab.frame.id;
+        newFrame.id = oldId;
+        newFrame.setAttribute('nwfaketop', '');
         newFrame.src = newUrl;
-        if (newZone === 'WEB') {
-          newFrame.setAttribute('nwdisable', '');
-        } else {
-          newFrame.setAttribute('nwfaketop', '');
-        }
         if (wasActive) newFrame.classList.add('active');
         parent.appendChild(newFrame);
         tab.frame = newFrame;
 
-        newFrame.addEventListener('load', function() {
-          try {
-            var doc = newFrame.contentDocument;
-            if (doc) {
-              tab.title = doc.title || tab.url;
-              tab.url = newFrame.contentWindow.location.href;
-              tab.zone = classifyZone(tab.url);
-            }
-          } catch (e) {
-            tab.title = tab.url;
-          }
-          tab.titleSpan.textContent = tab.title.length > 30 ? tab.title.substring(0, 30) + '...' : tab.title;
-          updateAll();
-        });
+        // Reset navigation depth on zone change (iframe recreated, history lost)
+        var zoneNavState = navState.get(tab.id);
+        if (zoneNavState) { zoneNavState.depth = 0; zoneNavState.forwardDepth = 0; }
+
+        attachFrameListeners(tab, newFrame);
       } else {
         tab.frame.src = newUrl;
       }
@@ -470,26 +909,78 @@
       });
     }
 
+    // ---- Shared frame event listener (iframe only — all zones use iframe + nwfaketop) ----
+    function attachFrameListeners(tab, frame) {
+      frame.addEventListener('load', function() {
+        try {
+          var doc = frame.contentDocument;
+          if (doc) {
+            tab.title = doc.title || tab.url;
+            tab.url = frame.contentWindow.location.href;
+            tab.zone = classifyZone(tab.url);
+            var iconLink = doc.querySelector('link[rel~="icon"]');
+            tab.favicon = iconLink ? iconLink.href : null;
+          }
+        } catch (e) {
+          tab.title = tab.url;
+        }
+        tab.titleSpan.textContent = tab.title.length > 30 ? tab.title.substring(0, 30) + '...' : tab.title;
+        tab.loading = false;
+        tab.tabEl.classList.remove('nm-tab-loading');
+
+        // Track navigation in navState
+        var state = navState.get(tab.id);
+        if (state && !state.isBackForward && tab.url !== state.lastUrl) {
+          state.depth++;
+          state.forwardDepth = 0;
+          state.lastUrl = tab.url;
+        }
+        if (state) state.isBackForward = false;
+
+        updateAll();
+      });
+
+      // Intercept target="_blank" links
+      frame.addEventListener('new-window', function(e) {
+        e.preventDefault();
+        var targetUrl = e.targetUrl || e.url;
+        if (targetUrl) createTab(targetUrl, tab.id);
+      });
+    }
+
     // ---- Tab management ----
-    function createTab(url) {
+    function createTab(url, openerId) {
       url = resolveUrl(url || HOME_URL);
       tabCounter++;
       var id = 'tab-' + tabCounter;
       var zone = classifyZone(url);
 
+      // Track navigation state
+      navState.set(id, { depth: 0, forwardDepth: 0, openerId: openerId || null, lastUrl: url, isBackForward: false });
+
+      // ALL zones use <iframe> with nwfaketop — full Node.js access everywhere.
+      // This is Nightmare: NO restrictions, full power, danger banner as warning only.
       var frame = document.createElement('iframe');
       frame.id = 'frame-' + id;
+      frame.setAttribute('nwfaketop', '');
       frame.src = url;
-      if (zone === 'WEB') {
-        frame.setAttribute('nwdisable', '');
-      } else {
-        frame.setAttribute('nwfaketop', '');
-      }
       document.getElementById('nm-content-area').appendChild(frame);
 
       var tabEl = document.createElement('div');
-      tabEl.className = 'nm-tab';
+      tabEl.className = 'nm-tab nm-tab-loading';
       tabEl.dataset.tabId = id;
+
+      var spinner = document.createElement('span');
+      spinner.className = 'nm-tab-spinner';
+      spinner.textContent = '\u25CB';
+      tabEl.appendChild(spinner);
+
+      var faviconEl = document.createElement('img');
+      faviconEl.className = 'nm-tab-favicon';
+      faviconEl.style.display = 'none';
+      faviconEl.width = 16;
+      faviconEl.height = 16;
+      tabEl.appendChild(faviconEl);
 
       var titleSpan = document.createElement('span');
       titleSpan.className = 'nm-tab-title';
@@ -507,23 +998,10 @@
       var tabBar = document.getElementById('nm-tab-bar');
       tabBar.insertBefore(tabEl, document.getElementById('nm-new-tab'));
 
-      var tab = { id: id, url: url, title: 'Loading...', zone: zone, frame: frame, tabEl: tabEl, titleSpan: titleSpan };
+      var tab = { id: id, url: url, title: 'Loading...', zone: zone, frame: frame, tabEl: tabEl, titleSpan: titleSpan, faviconEl: faviconEl, favicon: null, loading: true, openerId: openerId || null };
       tabs.set(id, tab);
 
-      frame.addEventListener('load', function() {
-        try {
-          var doc = frame.contentDocument;
-          if (doc) {
-            tab.title = doc.title || tab.url;
-            tab.url = frame.contentWindow.location.href;
-            tab.zone = classifyZone(tab.url);
-          }
-        } catch (e) {
-          tab.title = tab.url;
-        }
-        titleSpan.textContent = tab.title.length > 30 ? tab.title.substring(0, 30) + '...' : tab.title;
-        updateAll();
-      });
+      attachFrameListeners(tab, frame);
 
       activateTab(id);
       return tab;
@@ -535,6 +1013,7 @@
       tab.frame.remove();
       tab.tabEl.remove();
       tabs.delete(id);
+      navState.delete(id);
       dismissedBanners.delete(id);
       if (activeTabId === id) {
         var remaining = Array.from(tabs.keys());
@@ -565,8 +1044,20 @@
     }
 
     // ---- UI updates ----
+    function updateNavButtons() {
+      var tab = getActiveTab();
+      var backBtn = document.getElementById('nm-btn-back');
+      var fwdBtn = document.getElementById('nm-btn-forward');
+      if (!tab) { backBtn.disabled = true; fwdBtn.disabled = true; return; }
+      var state = navState.get(tab.id);
+      if (!state) { backBtn.disabled = true; fwdBtn.disabled = true; return; }
+      backBtn.disabled = !(state.depth > 0 || (state.openerId && tabs.has(state.openerId)));
+      fwdBtn.disabled = !(state.forwardDepth > 0);
+    }
+
     function updateAll() {
       updateNavBar();
+      updateNavButtons();
       updateBanner();
       updateStatusBar();
       updateWindowTitle();
@@ -575,23 +1066,27 @@
     function updateNavBar() {
       var tab = getActiveTab();
       if (!tab) return;
-      var displayUrl = tab.url;
-      var localPrefix = 'http://127.0.0.1:' + API_PORT + '/file/';
-      if (displayUrl.startsWith(localPrefix)) {
-        var filePath = decodeURIComponent(displayUrl.replace(localPrefix, ''));
-        if (filePath.startsWith(samplesDir)) {
-          var name = path.basename(filePath, '.html');
-          displayUrl = 'nightmare://' + (name === 'hello' ? 'home' : name);
-        } else if (filePath.startsWith(pagesDir)) {
-          displayUrl = 'nightmare://' + path.basename(filePath, '.html');
-        } else {
-          displayUrl = filePath;
-        }
-      }
+      var displayUrl = toDisplayUrl(tab.url);
       document.getElementById('nm-url-input').value = displayUrl;
       var dotEl = document.getElementById('nm-zone-dot');
-      dotEl.style.background = ZONE_COLORS[tab.zone] || '#585a64';
-      dotEl.style.boxShadow = '0 0 6px ' + (ZONE_COLORS[tab.zone] || '#585a64');
+      var zoneColor = ZONE_COLORS[tab.zone] || '#585a64';
+      dotEl.style.background = zoneColor;
+      dotEl.style.boxShadow = '0 0 6px ' + zoneColor;
+      // SSL indicator: lock for https
+      if (tab.url.startsWith('https://')) {
+        dotEl.textContent = '\uD83D\uDD12';
+        dotEl.title = 'Secure Connection (HTTPS)';
+      } else {
+        dotEl.textContent = '';
+        dotEl.title = tab.zone;
+      }
+      // Update favicon display
+      if (tab.favicon && tab.faviconEl) {
+        tab.faviconEl.src = tab.favicon;
+        tab.faviconEl.style.display = 'inline';
+      } else if (tab.faviconEl) {
+        tab.faviconEl.style.display = 'none';
+      }
     }
 
     function updateBanner() {
@@ -609,7 +1104,7 @@
 
       var iconSpan = document.createElement('span');
       iconSpan.className = 'nm-banner-icon';
-      iconSpan.textContent = zone === 'WEB' ? '\u26A0' : zone === 'LOCAL' ? '\u2714' : '\u2139';
+      iconSpan.textContent = zone === 'WEB' ? '\u2620' : zone === 'LOCAL' ? '\u2714' : '\u2139';
       banner.appendChild(iconSpan);
 
       var msgSpan = document.createElement('span');
@@ -656,11 +1151,31 @@
     // ---- Navigation ----
     document.getElementById('nm-btn-back').addEventListener('click', function() {
       var tab = getActiveTab();
-      if (tab) try { tab.frame.contentWindow.history.back(); } catch(e) {}
+      if (!tab) return;
+      var state = navState.get(tab.id);
+      if (!state) return;
+      if (state.depth > 0) {
+        state.isBackForward = true;
+        state.depth--;
+        state.forwardDepth++;
+        try { tab.frame.contentWindow.history.back(); } catch(e) {}
+        updateNavButtons();
+      } else if (state.openerId && tabs.has(state.openerId)) {
+        var oid = state.openerId;
+        closeTab(tab.id);
+        activateTab(oid);
+      }
     });
     document.getElementById('nm-btn-forward').addEventListener('click', function() {
       var tab = getActiveTab();
-      if (tab) try { tab.frame.contentWindow.history.forward(); } catch(e) {}
+      if (!tab) return;
+      var state = navState.get(tab.id);
+      if (!state || state.forwardDepth <= 0) return;
+      state.isBackForward = true;
+      state.depth++;
+      state.forwardDepth--;
+      try { tab.frame.contentWindow.history.forward(); } catch(e) {}
+      updateNavButtons();
     });
     document.getElementById('nm-btn-reload').addEventListener('click', function() {
       var tab = getActiveTab();
@@ -698,6 +1213,7 @@
       } catch(e) { win.maximize(); }
     });
     document.getElementById('nm-btn-close').addEventListener('click', function() { if (win) win.close(); });
+    document.getElementById('nm-btn-devtools').addEventListener('click', function() { if (win) win.showDevTools(); });
 
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', function(e) {
@@ -708,6 +1224,48 @@
       if (ctrl && e.key === 'r') { e.preventDefault(); var t = getActiveTab(); if (t) { t.frame.src = t.url; } }
       if (e.key === 'F5') { e.preventDefault(); var t2 = getActiveTab(); if (t2) { t2.frame.src = t2.url; } }
       if (e.key === 'F12') { e.preventDefault(); if (win) win.showDevTools(); }
+    });
+
+    // ---- Tab context menu ----
+    document.getElementById('nm-tab-bar').addEventListener('contextmenu', function(e) {
+      var tabEl = e.target.closest('.nm-tab');
+      if (!tabEl) return;
+      e.preventDefault();
+      var tabId = tabEl.dataset.tabId;
+      var tab = tabs.get(tabId);
+      if (!tab) return;
+
+      // Remove any existing context menu
+      var existing = document.getElementById('nm-context-menu');
+      if (existing) existing.remove();
+
+      var menu = document.createElement('div');
+      menu.id = 'nm-context-menu';
+      menu.style.cssText = 'position:fixed;top:' + e.clientY + 'px;left:' + e.clientX + 'px;background:#1a1a2e;border:1px solid #333;border-radius:4px;padding:4px 0;z-index:9999;min-width:160px;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-size:13px;';
+
+      var items = [
+        { label: 'Duplicate Tab', action: function() { createTab(tab.url); } },
+        { label: tab.tabEl.classList.contains('nm-tab-pinned') ? 'Unpin Tab' : 'Pin Tab', action: function() { tab.tabEl.classList.toggle('nm-tab-pinned'); } },
+        { label: 'Close Tab', action: function() { closeTab(tabId); } },
+        { label: 'Close Other Tabs', action: function() {
+          var allIds = Array.from(tabs.keys());
+          allIds.forEach(function(tid) { if (tid !== tabId) closeTab(tid); });
+        }},
+      ];
+
+      items.forEach(function(item) {
+        var el = document.createElement('div');
+        el.textContent = item.label;
+        el.style.cssText = 'padding:6px 16px;cursor:pointer;color:#e0e0e8;';
+        el.addEventListener('mouseenter', function() { el.style.background = '#2a2a4e'; });
+        el.addEventListener('mouseleave', function() { el.style.background = 'none'; });
+        el.addEventListener('click', function() { item.action(); menu.remove(); });
+        menu.appendChild(el);
+      });
+
+      document.body.appendChild(menu);
+      var removeMenu = function() { menu.remove(); document.removeEventListener('click', removeMenu); };
+      setTimeout(function() { document.addEventListener('click', removeMenu); }, 0);
     });
 
     // ---- Init ----

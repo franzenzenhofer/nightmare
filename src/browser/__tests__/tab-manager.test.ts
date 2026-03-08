@@ -179,4 +179,28 @@ describe('TabManager', () => {
       expect(tm.getTab('nonexistent')).toBeNull();
     });
   });
+
+  describe('hasTab', () => {
+    it('returns true for existing tab', () => {
+      const tab = tm.createTab('file:///a.html');
+      expect(tm.hasTab(tab.id)).toBe(true);
+    });
+
+    it('returns false for non-existent tab', () => {
+      expect(tm.hasTab('nonexistent')).toBe(false);
+    });
+  });
+
+  describe('createTab with openerId', () => {
+    it('passes openerId through to the tab', () => {
+      const parent = tm.createTab('file:///a.html');
+      const child = tm.createTab('file:///b.html', parent.id);
+      expect(child.openerId).toBe(parent.id);
+    });
+
+    it('sets openerId to undefined when not provided', () => {
+      const tab = tm.createTab('file:///a.html');
+      expect(tab.openerId).toBeUndefined();
+    });
+  });
 });

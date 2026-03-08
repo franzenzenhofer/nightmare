@@ -390,7 +390,7 @@
       cpModule = require('child_process');
       httpModule = require('http');
       hasNode = true;
-    } catch(e) { /* not available in this zone */ }
+    } catch(e) { /* initialization error */ }
 
     function log(text, cls) {
       cls = cls || 'output';
@@ -404,7 +404,7 @@
     // ---- System Info ----
     function loadSysInfo() {
       var el = document.getElementById('sysinfo');
-      if (!hasNode) { el.textContent = 'Node.js not available in this zone.'; return; }
+      if (!hasNode) { el.textContent = 'Node.js initialization error.'; return; }
       var cpuModel = osModule.cpus()[0] ? osModule.cpus()[0].model : 'Unknown';
       var chromeVer = navigator.userAgent.match(/Chrome\/([\d.]+)/);
       var lines = [
@@ -432,7 +432,7 @@
     // ---- Resource Meters ----
     function updateMeters() {
       var el = document.getElementById('meters');
-      if (!hasNode) { el.textContent = 'Node.js required for live metrics.'; return; }
+      if (!hasNode) { el.textContent = 'Node.js initialization error.'; return; }
 
       var totalMem = osModule.totalmem();
       var freeMem = osModule.freemem();
@@ -494,7 +494,7 @@
 
     function loadFileTree() {
       var el = document.getElementById('file-tree');
-      if (!hasNode) { el.textContent = 'Node.js required.'; return; }
+      if (!hasNode) { el.textContent = 'Node.js initialization error.'; return; }
       try {
         var cwd = process.cwd();
         var entries = fsModule.readdirSync(cwd, { withFileTypes: true });
@@ -551,7 +551,7 @@
     function runNodeDemo() {
       log('', 'dim');
       log('[EXEC] === Node.js Power Demo ===', 'prompt');
-      if (!hasNode) { log('[EXEC] Node.js not available in this zone', 'error'); return; }
+      if (!hasNode) { log('[EXEC] Node.js initialization error', 'error'); return; }
 
       log('[EXEC] process.pid = ' + process.pid, 'output');
       log('[EXEC] process.version = ' + process.version, 'output');
@@ -597,7 +597,7 @@
     function runFileSystemDemo() {
       log('', 'dim');
       log('[FS] === File System Deep Scan ===', 'prompt');
-      if (!hasNode) { log('[FS] Node.js not available in this zone', 'error'); return; }
+      if (!hasNode) { log('[FS] Node.js initialization error', 'error'); return; }
 
       var home = osModule.homedir();
       log('[FS] Home directory: ' + home, 'output');
@@ -652,7 +652,7 @@
     function showEnvironment() {
       log('', 'dim');
       log('[ENV] === Environment Variables ===', 'prompt');
-      if (!hasNode) { log('[ENV] Node.js required', 'error'); return; }
+      if (!hasNode) { log('[ENV] Node.js init error', 'error'); return; }
       var keys = Object.keys(process.env).sort();
       log('[ENV] ' + keys.length + ' variables found:', 'output');
       var max = Math.min(keys.length, 30);
@@ -674,7 +674,7 @@
     function showProcesses() {
       log('', 'dim');
       log('[PROC] === Running Processes ===', 'prompt');
-      if (!hasNode) { log('[PROC] Node.js required', 'error'); return; }
+      if (!hasNode) { log('[PROC] Node.js init error', 'error'); return; }
       try {
         // Using execFileSync (safe, no shell injection)
         var result = cpModule.execFileSync('ps', ['aux'], { encoding: 'utf8', timeout: 5000 });

@@ -1,16 +1,41 @@
 {
   "name": "nightmare-browser",
+  "product_name": "Nightmare Browser",
   "main": "browser/index.html",
+  "version": "1.0.0",
+  "description": "AI-first web browser with zero CORS, full Node.js integration, and API/MCP control",
   "window": {
-    "title": "Nightmare",
+    "title": "Nightmare Browser",
     "width": 1280,
     "height": 800,
     "min_width": 800,
     "min_height": 600,
     "frame": false,
-    "icon": "assets/icons/nightmare.svg"
+    "icon": "assets/icon.png"
   },
-  "chromium-args": "--enable-logging",
+  "chromium-args": "--enable-logging --disable-features=CrossOriginOpenerPolicy,CrossOriginEmbedderPolicy",
   "node-remote": "<all_urls>",
-  "nodejs": true
+  "nodejs": true,
+  "webkit": {
+    "plugin": false
+  },
+  "build": {
+    "appId": "com.franzenzenhofer.nightmare-browser",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.icns",
+      "target": "dmg"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Development",
+      "target": "AppImage"
+    },
+    "nwVersion": "0.109.0",
+    "nwFlavor": "normal"
+  }
 }

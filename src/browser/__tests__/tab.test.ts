@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { createTab } from '../services/tab';
-import type { Tab } from '../services/tab';
 
 describe('createTab', () => {
   it('creates a tab with a unique id', () => {
@@ -77,5 +76,15 @@ describe('createTab', () => {
     const tab1 = createTab();
     const tab2 = createTab();
     expect(tab1.id).not.toBe(tab2.id);
+  });
+
+  it('sets openerId to undefined when not provided', () => {
+    const tab = createTab();
+    expect(tab.openerId).toBeUndefined();
+  });
+
+  it('sets openerId when provided', () => {
+    const tab = createTab('file:///a.html', 'opener-123');
+    expect(tab.openerId).toBe('opener-123');
   });
 });

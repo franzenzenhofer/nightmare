@@ -120,7 +120,7 @@
 
     function init() {
       if (!hasNode) {
-        document.querySelector('.empty-state') || (document.querySelector('.editor-area').textContent = 'Node.js required for file access.');
+        document.querySelector('.empty-state') || (document.querySelector('.editor-area').textContent = 'Node.js initialization error.');
         return;
       }
       notesDir = pathModule.join(osModule.homedir(), 'Nightmare-Notes');
