@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>The Dreamwalker // Nightmare Control</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap');
+
+    :root {
+      --bg: #050508; --surface: #0e1020; --border: #1a1d2e;
+      --text: #f0eeeb; --dim: #585a64; --accent: #e63946;
+      --blue: #60a5fa; --green: #4ade80; --yellow: #fbbf24;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Fira Code', monospace;
+      padding: 32px; min-height: 100vh;
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    }
+
+    h1 { color: var(--accent); font-size: 32px; letter-spacing: 4px; text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(230,57,70,0.5); margin-bottom: 4px; }
+    .subtitle { color: var(--dim); font-size: 12px; letter-spacing: 2px; margin-bottom: 32px; }
+
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px 24px; margin-bottom: 20px;
+      position: relative; overflow: hidden;
+    }
+    .panel::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.5;
+    }
+    .panel h2 { font-size: 11px; color: var(--accent); text-transform: uppercase;
+      letter-spacing: 3px; margin-bottom: 16px; }
+
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+    button {
+      font-family: 'Fira Code', monospace; font-size: 11px;
+      padding: 8px 16px; border-radius: 4px; cursor: pointer;
+      transition: all 0.15s; text-transform: uppercase; letter-spacing: 1px;
+      background: rgba(230,57,70,0.1); color: var(--accent); border: 1px solid var(--accent);
+    }
+    button:hover { background: var(--accent); color: var(--bg);
+      box-shadow: 0 0 20px rgba(230,57,70,0.4); }
+    button.blue { background: rgba(96,165,250,0.1); color: var(--blue); border-color: var(--blue); }
+    button.blue:hover { background: var(--blue); color: var(--bg); }
+    button.green { background: rgba(74,222,128,0.1); color: var(--green); border-color: var(--green); }
+    button.green:hover { background: var(--green); color: var(--bg); }
+    button.danger { background: rgba(255,0,0,0.15); color: #ff3333; border-color: #ff3333; }
+    button.danger:hover { background: #ff3333; color: white; }
+
+    .tab-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px; border: 1px solid var(--border); border-radius: 4px;
+      margin-bottom: 8px; background: rgba(0,0,0,0.3);
+    }
+    .tab-item.is-me { border-left: 3px solid var(--accent);
+      box-shadow: inset 0 0 20px rgba(230,57,70,0.05); }
+    .tab-info { display: flex; flex-direction: column; gap: 3px; overflow: hidden; flex: 1; }
+    .tab-id { color: var(--dim); font-size: 9px; letter-spacing: 1px; }
+    .tab-title { color: var(--green); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tab-url { color: var(--text); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.6; }
+    .tab-zone { font-size: 9px; letter-spacing: 1px; }
+    .tab-zone.LOCAL { color: var(--green); }
+    .tab-zone.LOCALHOST { color: var(--blue); }
+    .tab-zone.WEB { color: #ff3333; }
+
+    .tab-actions { display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px; }
+    .tab-actions button { padding: 4px 8px; font-size: 9px; }
+
+    .log { background: #06060a; border: 1px solid #12141e; border-radius: 4px;
+      padding: 12px; max-height: 200px; overflow-y: auto; font-size: 10px; line-height: 1.6; }
+    .log .entry { display: block; }
+    .log .ts { color: var(--dim); }
+    .log .action { color: var(--accent); }
+    .log .result { color: var(--green); }
+    .log .error { color: #ff6b6b; }
+
+    .pulse { animation: pulse 2s infinite; color: var(--accent); }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .stat-row { display: flex; gap: 24px; font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+    .stat-val { color: var(--text); }
+  </style>
+</head>
+<body>
+  <h1>The Dreamwalker</h1>
+  <div class="subtitle">This page controls the browser it lives in via REST API // nightmare://dreamwalker</div>
+
+  <div class="panel">
+    <h2>// Browser State</h2>
+    <div id="stats" class="stat-row">Connecting...</div>
+  </div>
+
+  <div class="panel">
+    <h2>// Commands</h2>
+    <div class="controls">
+      <button class="green" id="btn-spawn">Spawn New Tab</button>
+      <button class="blue" id="btn-spawn-nightmare">Spawn Nightmare Page</button>
+      <button id="btn-close-others">Close All Others</button>
+      <button id="btn-chaos">Chaos Mode</button>
+      <button class="danger" id="btn-self-destruct">Self-Destruct</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>// Live Tabs <span class="pulse">&#x25CF;</span></h2>
+    <div id="tab-list">Scanning...</div>
+  </div>
+
+  <div class="panel">
+    <h2>// Activity Log</h2>
+    <div id="log" class="log">
+      <span class="entry"><span class="ts">[init]</span> Dreamwalker awakening...</span>
+    </div>
+  </div>
+
+  <script>
+    var API_PORT = 6660;
+    try { API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10); } catch(e) {}
+    var API_BASE = 'http://127.0.0.1:' + API_PORT + '/api';
+    var myTabId = null;
+    var logEl = document.getElementById('log');
+
+    function addLog(action, msg, cls) {
+      cls = cls || 'result';
+      var ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+      var entry = document.createElement('span');
+      entry.className = 'entry';
+      var tsSpan = document.createElement('span');
+      tsSpan.className = 'ts';
+      tsSpan.textContent = '[' + ts + '] ';
+      var actSpan = document.createElement('span');
+      actSpan.className = 'action';
+      actSpan.textContent = action + ' ';
+      var msgSpan = document.createElement('span');
+      msgSpan.className = cls;
+      msgSpan.textContent = msg;
+      entry.appendChild(tsSpan);
+      entry.appendChild(actSpan);
+      entry.appendChild(msgSpan);
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function api(method, endpoint, body) {
+      var opts = { method: method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      return fetch(API_BASE + endpoint, opts).then(function(r) {
+        if (r.status === 204) return null;
+        return r.json();
+      });
+    }
+
+    function updateUI() {
+      api('GET', '/state').then(function(state) {
+        if (!myTabId) myTabId = state.activeTabId;
+
+        var statsEl = document.getElementById('stats');
+        statsEl.textContent = '';
+        var items = [
+          ['Tabs', state.tabCount],
+          ['Active', state.activeTabId],
+          ['Node', state.nodeVersion],
+          ['PID', state.pid],
+          ['Port', state.apiPort]
+        ];
+        items.forEach(function(item) {
+          var s = document.createElement('span');
+          s.textContent = item[0] + ': ';
+          var v = document.createElement('span');
+          v.className = 'stat-val';
+          v.textContent = item[1];
+          s.appendChild(v);
+          statsEl.appendChild(s);
+        });
+
+        var listEl = document.getElementById('tab-list');
+        listEl.textContent = '';
+        state.tabs.forEach(function(tab) {
+          var isMe = tab.id === myTabId;
+          var div = document.createElement('div');
+          div.className = 'tab-item' + (isMe ? ' is-me' : '');
+
+          var info = document.createElement('div');
+          info.className = 'tab-info';
+
+          var title = document.createElement('div');
+          title.className = 'tab-title';
+          title.textContent = (isMe ? '// THIS TAB // ' : '') + tab.title;
+          info.appendChild(title);
+
+          var url = document.createElement('div');
+          url.className = 'tab-url';
+          url.textContent = tab.url;
+          info.appendChild(url);
+
+          var meta = document.createElement('div');
+          meta.className = 'tab-id';
+          var zone = document.createElement('span');
+          zone.className = 'tab-zone ' + tab.zone;
+          zone.textContent = tab.zone;
+          meta.textContent = tab.id + ' // ';
+          meta.appendChild(zone);
+          info.appendChild(meta);
+
+          div.appendChild(info);
+
+          var actions = document.createElement('div');
+          actions.className = 'tab-actions';
+
+          if (!isMe) {
+            var navBtn = document.createElement('button');
+            navBtn.className = 'blue';
+            navBtn.textContent = 'Navigate';
+            navBtn.addEventListener('click', function() { navigateTab(tab.id); });
+            actions.appendChild(navBtn);
+          }
+
+          var closeBtn = document.createElement('button');
+          closeBtn.className = 'danger';
+          closeBtn.textContent = 'Close';
+          closeBtn.addEventListener('click', function() { closeTabApi(tab.id); });
+          actions.appendChild(closeBtn);
+
+          div.appendChild(actions);
+          listEl.appendChild(div);
+        });
+      }).catch(function(err) {
+        addLog('ERROR', 'API unreachable: ' + err.message, 'error');
+      });
+    }
+
+    function navigateTab(id) {
+      var urls = [
+        'https://news.ycombinator.com',
+        'https://github.com',
+        'nightmare://home',
+        'https://wikipedia.org',
+        'nightmare://about'
+      ];
+      var url = urls[Math.floor(Math.random() * urls.length)];
+      addLog('NAVIGATE', id + ' -> ' + url);
+      api('POST', '/tabs/' + id + '/navigate', { url: url }).then(function() {
+        updateUI();
+      });
+    }
+
+    function closeTabApi(id) {
+      addLog('CLOSE', 'Closing tab ' + id);
+      api('DELETE', '/tabs/' + id).then(function() {
+        updateUI();
+      });
+    }
+
+    document.getElementById('btn-spawn').addEventListener('click', function() {
+      var sites = ['https://news.ycombinator.com', 'https://github.com', 'https://wikipedia.org', 'https://example.com'];
+      var url = sites[Math.floor(Math.random() * sites.length)];
+      addLog('SPAWN', 'Creating tab: ' + url);
+      api('POST', '/tabs', { url: url }).then(function(tab) {
+        addLog('SPAWNED', 'Tab ' + tab.id + ' created', 'result');
+        updateUI();
+      });
+    });
+
+    document.getElementById('btn-spawn-nightmare').addEventListener('click', function() {
+      var pages = ['nightmare://home', 'nightmare://zombie-hunter', 'nightmare://shadow-notes', 'nightmare://telemetry', 'nightmare://about'];
+      var url = pages[Math.floor(Math.random() * pages.length)];
+      addLog('SPAWN', 'Creating nightmare page: ' + url);
+      api('POST', '/tabs', { url: url }).then(function(tab) {
+        addLog('SPAWNED', 'Tab ' + tab.id + ' (' + tab.zone + ')', 'result');
+        updateUI();
+      });
+    });
+
+    document.getElementById('btn-close-others').addEventListener('click', function() {
+      addLog('PURGE', 'Closing all other tabs...');
+      api('GET', '/state').then(function(state) {
+        var closed = 0;
+        var promises = [];
+        state.tabs.forEach(function(tab) {
+          if (tab.id !== myTabId) {
+            closed++;
+            promises.push(api('DELETE', '/tabs/' + tab.id));
+          }
+        });
+        Promise.all(promises).then(function() {
+          addLog('PURGED', closed + ' tabs destroyed', 'result');
+          updateUI();
+        });
+      });
+    });
+
+    document.getElementById('btn-chaos').addEventListener('click', function() {
+      addLog('CHAOS', 'Initiating chaos sequence...');
+      api('POST', '/tabs', { url: 'https://example.com' }).then(function(tab) {
+        addLog('CHAOS', 'Tab ' + tab.id + ' spawned');
+        updateUI();
+        setTimeout(function() {
+          addLog('CHAOS', 'Navigating ' + tab.id + ' to nightmare://home');
+          api('POST', '/tabs/' + tab.id + '/navigate', { url: 'nightmare://home' }).then(function() {
+            updateUI();
+          });
+        }, 1500);
+        setTimeout(function() {
+          addLog('CHAOS', 'Destroying ' + tab.id);
+          api('DELETE', '/tabs/' + tab.id).then(function() {
+            addLog('CHAOS', 'Sequence complete', 'result');
+            updateUI();
+          });
+        }, 3000);
+      });
+    });
+
+    document.getElementById('btn-self-destruct').addEventListener('click', function() {
+      addLog('SELF-DESTRUCT', 'This tab will now delete itself...');
+      setTimeout(function() {
+        api('DELETE', '/tabs/' + myTabId);
+      }, 500);
+    });
+
+    setInterval(updateUI, 2000);
+    updateUI();
+    addLog('READY', 'Dreamwalker active on port ' + API_PORT, 'result');
+  </script>
+</body>
+</html>

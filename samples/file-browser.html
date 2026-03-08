@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>System Explorer // Nightmare</title>
+  <style>
+    :root {
+      --bg: #050508; --surface: #0a0c14; --border: #1a1d2e;
+      --text: #f0eeeb; --dim: #585a64; --accent: #4ade80;
+      --blue: #60a5fa; --red: #e63946; --yellow: #fbbf24;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Cascadia Code', 'JetBrains Mono', monospace;
+      padding: 24px; height: 100vh; display: flex; flex-direction: column;
+    }
+
+    h1 { color: var(--accent); font-size: 24px; letter-spacing: 3px; text-transform: uppercase;
+      text-shadow: 0 0 15px rgba(74,222,128,0.4); margin-bottom: 4px; }
+    .subtitle { color: var(--dim); font-size: 11px; letter-spacing: 2px; margin-bottom: 16px; }
+
+    .toolbar {
+      display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+    }
+    .path-input {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); font-family: inherit; font-size: 12px;
+      padding: 8px 12px; border-radius: 4px; outline: none;
+    }
+    .path-input:focus { border-color: var(--accent); box-shadow: 0 0 6px rgba(74,222,128,0.2); }
+
+    button {
+      font-family: inherit; font-size: 10px; padding: 8px 12px;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); border-radius: 4px; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 1px; transition: all 0.15s;
+    }
+    button:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+    .explorer {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .explorer-header {
+      display: grid; grid-template-columns: 3fr 1fr 1fr;
+      padding: 8px 16px; background: rgba(0,0,0,0.4);
+      border-bottom: 1px solid var(--border);
+      font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px;
+    }
+    .file-list { flex: 1; overflow-y: auto; }
+    .file-row {
+      display: grid; grid-template-columns: 3fr 1fr 1fr;
+      padding: 6px 16px; font-size: 11px; cursor: pointer;
+      border-bottom: 1px solid rgba(26,29,46,0.5);
+    }
+    .file-row:hover { background: rgba(255,255,255,0.03); }
+    .name-col { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .name-col.dir { color: var(--blue); font-weight: 700; }
+    .name-col.file { color: var(--text); }
+    .size-col { color: var(--dim); }
+    .date-col { color: var(--dim); }
+    .error-msg { color: var(--red); padding: 16px; font-size: 11px; }
+
+    .file-list::-webkit-scrollbar { width: 6px; }
+    .file-list::-webkit-scrollbar-track { background: transparent; }
+    .file-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>System Explorer</h1>
+  <div class="subtitle">Direct filesystem access + tab spawning API // nightmare://file-browser</div>
+
+  <div class="toolbar">
+    <button id="btn-up">UP</button>
+    <button id="btn-home">HOME</button>
+    <button id="btn-root">/</button>
+    <input type="text" id="path-input" class="path-input" spellcheck="false">
+    <button id="btn-go">GO</button>
+  </div>
+
+  <div class="explorer">
+    <div class="explorer-header">
+      <div>Name</div>
+      <div>Size</div>
+      <div>Modified</div>
+    </div>
+    <div id="file-list" class="file-list"></div>
+  </div>
+
+  <script>
+    var fsModule = require('fs');
+    var pathModule = require('path');
+    var osModule = require('os');
+
+    var API_PORT = 6660;
+    try { API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10); } catch(e) {}
+    var API_BASE = 'http://127.0.0.1:' + API_PORT + '/api';
+
+    var currentPath = osModule.homedir();
+    var pathInput = document.getElementById('path-input');
+    var fileListEl = document.getElementById('file-list');
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      var k = 1024;
+      var sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      var i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+    }
+
+    function formatDate(d) {
+      return d.toISOString().substring(0, 10) + ' ' + d.toTimeString().substring(0, 5);
+    }
+
+    function navigateTo(targetPath) {
+      try {
+        var resolved = pathModule.resolve(targetPath);
+        var items = fsModule.readdirSync(resolved);
+        var files = [];
+
+        items.forEach(function(item) {
+          try {
+            var itemPath = pathModule.join(resolved, item);
+            var stat = fsModule.statSync(itemPath);
+            files.push({
+              name: item,
+              path: itemPath,
+              isDir: stat.isDirectory(),
+              size: stat.size,
+              mtime: stat.mtime
+            });
+          } catch(e) { /* skip inaccessible */ }
+        });
+
+        files.sort(function(a, b) {
+          if (a.isDir && !b.isDir) return -1;
+          if (!a.isDir && b.isDir) return 1;
+          return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+        });
+
+        currentPath = resolved;
+        pathInput.value = currentPath;
+        renderList(files);
+      } catch(err) {
+        fileListEl.textContent = '';
+        var errDiv = document.createElement('div');
+        errDiv.className = 'error-msg';
+        errDiv.textContent = 'Error: ' + err.message;
+        fileListEl.appendChild(errDiv);
+      }
+    }
+
+    function renderList(files) {
+      fileListEl.textContent = '';
+
+      // Parent dir row
+      var parentRow = document.createElement('div');
+      parentRow.className = 'file-row';
+      var parentName = document.createElement('div');
+      parentName.className = 'name-col dir';
+      parentName.textContent = '..';
+      parentRow.appendChild(parentName);
+      parentRow.appendChild(document.createElement('div'));
+      parentRow.appendChild(document.createElement('div'));
+      parentRow.addEventListener('click', function() { navigateTo(pathModule.join(currentPath, '..')); });
+      fileListEl.appendChild(parentRow);
+
+      files.forEach(function(f) {
+        var row = document.createElement('div');
+        row.className = 'file-row';
+
+        var nameEl = document.createElement('div');
+        nameEl.className = 'name-col ' + (f.isDir ? 'dir' : 'file');
+        nameEl.textContent = (f.isDir ? '/' : '') + f.name;
+        row.appendChild(nameEl);
+
+        var sizeEl = document.createElement('div');
+        sizeEl.className = 'size-col';
+        sizeEl.textContent = f.isDir ? '--' : formatBytes(f.size);
+        row.appendChild(sizeEl);
+
+        var dateEl = document.createElement('div');
+        dateEl.className = 'date-col';
+        dateEl.textContent = formatDate(f.mtime);
+        row.appendChild(dateEl);
+
+        row.addEventListener('click', function() {
+          if (f.isDir) {
+            navigateTo(f.path);
+          } else {
+            openInNewTab(f.path);
+          }
+        });
+
+        fileListEl.appendChild(row);
+      });
+    }
+
+    function openInNewTab(filePath) {
+      fetch(API_BASE + '/tabs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: filePath })
+      }).catch(function() {});
+    }
+
+    document.getElementById('btn-up').addEventListener('click', function() {
+      navigateTo(pathModule.join(currentPath, '..'));
+    });
+    document.getElementById('btn-home').addEventListener('click', function() {
+      navigateTo(osModule.homedir());
+    });
+    document.getElementById('btn-root').addEventListener('click', function() {
+      navigateTo('/');
+    });
+    document.getElementById('btn-go').addEventListener('click', function() {
+      navigateTo(pathInput.value);
+    });
+    pathInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') navigateTo(pathInput.value);
+    });
+
+    navigateTo(currentPath);
+  </script>
+</body>
+</html>

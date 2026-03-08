@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nightmare Watcher // Telemetry</title>
+  <style>
+    :root {
+      --bg: #050508; --surface: #0a0c14; --border: #1a1d2e;
+      --text: #f0eeeb; --dim: #585a64; --accent: #e63946;
+      --green: #4ade80; --blue: #60a5fa; --yellow: #fbbf24; --purple: #c084fc;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Cascadia Code', 'JetBrains Mono', monospace;
+      padding: 24px; min-height: 100vh; overflow-y: auto;
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px);
+    }
+
+    h1 { color: var(--accent); font-size: 28px; letter-spacing: 4px; text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(230,57,70,0.5); margin-bottom: 4px; }
+    .subtitle { color: var(--dim); font-size: 11px; letter-spacing: 2px; margin-bottom: 24px; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 16px; position: relative; overflow: hidden;
+    }
+    .panel::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.4;
+    }
+    .panel h2 { font-size: 10px; color: var(--accent); text-transform: uppercase;
+      letter-spacing: 3px; margin-bottom: 12px; }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat { text-align: center; }
+    .stat-value { font-size: 20px; color: var(--text); font-weight: 700; }
+    .stat-label { font-size: 9px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+
+    .event-log {
+      max-height: 300px; overflow-y: auto; font-size: 10px; line-height: 1.6;
+      background: #030305; border: 1px solid #0f1118; border-radius: 4px; padding: 10px;
+    }
+    .event { display: block; border-bottom: 1px solid #0a0c14; padding: 2px 0; }
+    .event .ts { color: var(--dim); }
+    .event .type { font-weight: 700; min-width: 80px; display: inline-block; }
+    .event .type-tab { color: var(--green); }
+    .event .type-nav { color: var(--blue); }
+    .event .type-zone { color: var(--yellow); }
+    .event .type-api { color: var(--purple); }
+    .event .type-error { color: var(--accent); }
+    .event .detail { color: var(--text); opacity: 0.7; }
+
+    .tab-monitor {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .tab-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 3px;
+      font-size: 10px;
+    }
+    .tab-row .zone-badge {
+      padding: 1px 6px; border-radius: 2px; font-size: 8px;
+      font-weight: 700; letter-spacing: 1px;
+    }
+    .zone-badge.LOCAL { background: rgba(74,222,128,0.15); color: var(--green); }
+    .zone-badge.LOCALHOST { background: rgba(96,165,250,0.15); color: var(--blue); }
+    .zone-badge.WEB { background: rgba(230,57,70,0.15); color: var(--accent); }
+    .tab-row .tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .tab-row .tab-id { color: var(--dim); font-size: 9px; }
+    .tab-row.active { border-left: 2px solid var(--accent); }
+
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .controls { display: flex; gap: 8px; margin-bottom: 16px; }
+    button {
+      font-family: inherit; font-size: 10px; padding: 6px 12px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text); border-radius: 4px; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    button:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>Nightmare Watcher</h1>
+  <div class="subtitle">Real-time AI observability dashboard // nightmare://telemetry <span class="pulse">LIVE</span></div>
+
+  <div class="controls">
+    <button id="btn-clear">Clear Log</button>
+    <button id="btn-snapshot">API Snapshot</button>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>// Browser State</h2>
+      <div class="stat-grid" id="stats">
+        <div class="stat"><div class="stat-value" id="s-tabs">-</div><div class="stat-label">Tabs</div></div>
+        <div class="stat"><div class="stat-value" id="s-port">-</div><div class="stat-label">API Port</div></div>
+        <div class="stat"><div class="stat-value" id="s-pid">-</div><div class="stat-label">PID</div></div>
+        <div class="stat"><div class="stat-value" id="s-uptime">-</div><div class="stat-label">Uptime</div></div>
+        <div class="stat"><div class="stat-value" id="s-node">-</div><div class="stat-label">Node</div></div>
+        <div class="stat"><div class="stat-value" id="s-polls">0</div><div class="stat-label">Polls</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>// Active Tabs</h2>
+      <div class="tab-monitor" id="tab-monitor">Loading...</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>// Event Stream <span class="pulse">&#x25CF;</span></h2>
+    <div class="event-log" id="event-log"></div>
+  </div>
+
+  <script>
+    var API_PORT = 6660;
+    try { API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10); } catch(e) {}
+    var API_BASE = 'http://127.0.0.1:' + API_PORT + '/api';
+
+    var eventLogEl = document.getElementById('event-log');
+    var pollCount = 0;
+    var previousState = null;
+
+    function addEvent(type, detail, cls) {
+      cls = cls || 'type-api';
+      var ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      var entry = document.createElement('span');
+      entry.className = 'event';
+
+      var tsSpan = document.createElement('span');
+      tsSpan.className = 'ts';
+      tsSpan.textContent = ts + ' ';
+
+      var typeSpan = document.createElement('span');
+      typeSpan.className = 'type ' + cls;
+      typeSpan.textContent = type + ' ';
+
+      var detailSpan = document.createElement('span');
+      detailSpan.className = 'detail';
+      detailSpan.textContent = detail;
+
+      entry.appendChild(tsSpan);
+      entry.appendChild(typeSpan);
+      entry.appendChild(detailSpan);
+
+      eventLogEl.insertBefore(entry, eventLogEl.firstChild);
+
+      // Keep max 200 events
+      while (eventLogEl.children.length > 200) {
+        eventLogEl.removeChild(eventLogEl.lastChild);
+      }
+    }
+
+    function diffStates(prev, curr) {
+      if (!prev) {
+        addEvent('INIT', curr.tabCount + ' tabs, port ' + curr.apiPort, 'type-tab');
+        return;
+      }
+
+      // Detect new tabs
+      var prevIds = prev.tabs.map(function(t) { return t.id; });
+      var currIds = curr.tabs.map(function(t) { return t.id; });
+
+      currIds.forEach(function(id) {
+        if (prevIds.indexOf(id) === -1) {
+          var tab = curr.tabs.find(function(t) { return t.id === id; });
+          addEvent('TAB+', 'Created: ' + id + ' [' + tab.zone + '] ' + tab.title, 'type-tab');
+        }
+      });
+
+      prevIds.forEach(function(id) {
+        if (currIds.indexOf(id) === -1) {
+          addEvent('TAB-', 'Closed: ' + id, 'type-error');
+        }
+      });
+
+      // Detect navigations
+      curr.tabs.forEach(function(tab) {
+        var prevTab = prev.tabs.find(function(t) { return t.id === tab.id; });
+        if (prevTab && prevTab.url !== tab.url) {
+          addEvent('NAV', tab.id + ' -> ' + tab.url, 'type-nav');
+        }
+        if (prevTab && prevTab.zone !== tab.zone) {
+          addEvent('ZONE', tab.id + ': ' + prevTab.zone + ' -> ' + tab.zone, 'type-zone');
+        }
+        if (prevTab && prevTab.title !== tab.title) {
+          addEvent('TITLE', tab.id + ': ' + tab.title, 'type-api');
+        }
+      });
+
+      // Detect active tab change
+      if (prev.activeTabId !== curr.activeTabId) {
+        addEvent('FOCUS', 'Active tab: ' + curr.activeTabId, 'type-nav');
+      }
+    }
+
+    function poll() {
+      pollCount++;
+      document.getElementById('s-polls').textContent = pollCount;
+
+      fetch(API_BASE + '/state')
+        .then(function(r) { return r.json(); })
+        .then(function(state) {
+          // Update stats
+          document.getElementById('s-tabs').textContent = state.tabCount;
+          document.getElementById('s-port').textContent = ':' + state.apiPort;
+          document.getElementById('s-pid').textContent = state.pid;
+          document.getElementById('s-uptime').textContent = Math.floor(state.uptime) + 's';
+          document.getElementById('s-node').textContent = state.nodeVersion;
+
+          // Diff and log events
+          diffStates(previousState, state);
+          previousState = state;
+
+          // Update tab monitor
+          var monEl = document.getElementById('tab-monitor');
+          monEl.textContent = '';
+          state.tabs.forEach(function(tab) {
+            var row = document.createElement('div');
+            row.className = 'tab-row' + (tab.id === state.activeTabId ? ' active' : '');
+
+            var badge = document.createElement('span');
+            badge.className = 'zone-badge ' + tab.zone;
+            badge.textContent = tab.zone;
+            row.appendChild(badge);
+
+            var title = document.createElement('span');
+            title.className = 'tab-title';
+            title.textContent = tab.title;
+            row.appendChild(title);
+
+            var id = document.createElement('span');
+            id.className = 'tab-id';
+            id.textContent = tab.id;
+            row.appendChild(id);
+
+            monEl.appendChild(row);
+          });
+        })
+        .catch(function(err) {
+          addEvent('ERROR', 'API unreachable: ' + err.message, 'type-error');
+        });
+    }
+
+    document.getElementById('btn-clear').addEventListener('click', function() {
+      eventLogEl.textContent = '';
+      addEvent('CLEAR', 'Event log cleared', 'type-api');
+    });
+
+    document.getElementById('btn-snapshot').addEventListener('click', function() {
+      fetch(API_BASE + '/state')
+        .then(function(r) { return r.json(); })
+        .then(function(state) {
+          addEvent('SNAPSHOT', JSON.stringify(state), 'type-api');
+        });
+    });
+
+    setInterval(poll, 1000);
+    poll();
+    addEvent('BOOT', 'Nightmare Watcher active on port ' + API_PORT, 'type-tab');
+  </script>
+</body>
+</html>

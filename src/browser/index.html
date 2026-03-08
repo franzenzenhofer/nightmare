@@ -56,18 +56,30 @@
       <span id="nm-status-zone">Ready</span>
       <span id="nm-status-node"></span>
       <span id="nm-status-tabs">0 tabs</span>
+      <span id="nm-status-port"></span>
       <span id="nm-status-clock"></span>
     </div>
   </div>
 
   <script>
-    var gui = require('nw.gui');
-    var win = gui.Window.get();
+    // ---- Window object (robust: try modern API first, then legacy) ----
+    var win = null;
+    try {
+      win = nw.Window.get();
+    } catch(e1) {
+      try {
+        var gui = require('nw.gui');
+        win = gui.Window.get();
+      } catch(e2) {
+        console.error('[Nightmare] Could not get window handle:', e2.message);
+      }
+    }
+
     var path = require('path');
     var http = require('http');
     var fs = require('fs');
     var os = require('os');
-    console.log('[Nightmare] Modules loaded');
+    console.log('[Nightmare] Modules loaded, win:', !!win);
 
     // ---- State ----
     var tabs = new Map();
@@ -75,16 +87,14 @@
     var tabCounter = 0;
     var dismissedBanners = new Set();
     var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
-    // NW.js doesn't provide __dirname in inline scripts — use process.cwd() or nwapp-path
+
+    // NW.js inline scripts don't have __dirname — derive paths from process.cwd()
     var _srcDir = process.cwd();
-    // If cwd doesn't end with /src, look for src/ subdir or nwapp-path from argv
     if (!_srcDir.endsWith('/src') && !_srcDir.endsWith('\\src')) {
-      // Try argv for --nwapp-path=
       process.argv.forEach(function(a) {
         if (a === 'src/' || a === 'src') _srcDir = path.resolve(a);
       });
     }
-    // Fallback: use the package.json location
     if (!fs.existsSync(path.join(_srcDir, 'browser', 'index.html'))) {
       _srcDir = path.resolve('src');
     }
@@ -92,6 +102,16 @@
     var samplesDir = path.join(_projectDir, 'samples');
     var pagesDir = path.join(_srcDir, 'pages');
     var HOME_URL = 'nightmare://home';
+
+    console.log('[Nightmare] srcDir:', _srcDir);
+    console.log('[Nightmare] samplesDir:', samplesDir);
+    console.log('[Nightmare] pagesDir:', pagesDir);
+
+    // ---- Execute JS in a frame context safely ----
+    function executeInFrame(frame, code) {
+      var fn = new frame.contentWindow.Function(code);
+      return fn();
+    }
 
     // ---- Unified server: API + local file serving on single port ----
     function localFileUrl(filePath) {
@@ -110,14 +130,18 @@
         '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
         '.gif': 'image/gif', '.svg': 'image/svg+xml',
         '.ico': 'image/x-icon', '.woff': 'font/woff',
-        '.woff2': 'font/woff2', '.ttf': 'font/ttf'
+        '.woff2': 'font/woff2', '.ttf': 'font/ttf',
+        '.mp3': 'audio/mpeg', '.mp4': 'video/mp4',
+        '.wasm': 'application/wasm', '.xml': 'application/xml',
+        '.txt': 'text/plain', '.md': 'text/plain',
+        '.ts': 'text/plain', '.tsx': 'text/plain'
       };
-      return m[ext] || 'text/plain';
+      return m[ext] || 'application/octet-stream';
     }
 
     var server = http.createServer(function(req, res) {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, PUT, PATCH, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
       if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -147,7 +171,17 @@
         var tabList = [];
         tabs.forEach(function(t) { tabList.push(tabToJson(t)); });
         res.writeHead(200);
-        res.end(JSON.stringify({ tabs: tabList, activeTabId: activeTabId, tabCount: tabs.size, nodeVersion: process.version }));
+        res.end(JSON.stringify({
+          tabs: tabList,
+          activeTabId: activeTabId,
+          tabCount: tabs.size,
+          nodeVersion: process.version,
+          apiPort: API_PORT,
+          platform: process.platform,
+          arch: process.arch,
+          pid: process.pid,
+          uptime: process.uptime()
+        }));
         return;
       }
 
@@ -172,15 +206,24 @@
         return;
       }
 
-      var deleteMatch = url.match(/^\/api\/tabs\/(.+)$/);
-      if (deleteMatch && req.method === 'DELETE') {
-        closeTab(deleteMatch[1]);
+      // Tab-specific endpoints
+      var tabIdMatch = url.match(/^\/api\/tabs\/([^/]+)$/);
+      if (tabIdMatch && req.method === 'GET') {
+        var t = tabs.get(tabIdMatch[1]);
+        if (!t) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        res.writeHead(200);
+        res.end(JSON.stringify(tabToJson(t)));
+        return;
+      }
+
+      if (tabIdMatch && req.method === 'DELETE') {
+        closeTab(tabIdMatch[1]);
         res.writeHead(204);
         res.end();
         return;
       }
 
-      var navMatch = url.match(/^\/api\/tabs\/(.+)\/navigate$/);
+      var navMatch = url.match(/^\/api\/tabs\/([^/]+)\/navigate$/);
       if (navMatch && req.method === 'POST') {
         var nbody = '';
         req.on('data', function(c) { nbody += c; });
@@ -200,33 +243,115 @@
         return;
       }
 
+      var reloadMatch = url.match(/^\/api\/tabs\/([^/]+)\/reload$/);
+      if (reloadMatch && req.method === 'POST') {
+        var rt = tabs.get(reloadMatch[1]);
+        if (!rt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        rt.frame.src = rt.url;
+        res.writeHead(200);
+        res.end(JSON.stringify(tabToJson(rt)));
+        return;
+      }
+
+      var activateMatch = url.match(/^\/api\/tabs\/([^/]+)\/activate$/);
+      if (activateMatch && req.method === 'POST') {
+        var at = tabs.get(activateMatch[1]);
+        if (!at) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        activateTab(activateMatch[1]);
+        res.writeHead(200);
+        res.end(JSON.stringify(tabToJson(at)));
+        return;
+      }
+
+      var htmlMatch = url.match(/^\/api\/tabs\/([^/]+)\/html$/);
+      if (htmlMatch && req.method === 'GET') {
+        var ht = tabs.get(htmlMatch[1]);
+        if (!ht) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        try {
+          var htmlContent = ht.frame.contentDocument.documentElement.outerHTML;
+          res.writeHead(200);
+          res.end(JSON.stringify({ tabId: ht.id, html: htmlContent }));
+        } catch(e) {
+          res.writeHead(200);
+          res.end(JSON.stringify({ tabId: ht.id, html: null, error: 'Cross-origin: cannot read HTML' }));
+        }
+        return;
+      }
+
+      var execMatch = url.match(/^\/api\/tabs\/([^/]+)\/execute$/);
+      if (execMatch && req.method === 'POST') {
+        var ebody = '';
+        req.on('data', function(c) { ebody += c; });
+        req.on('end', function() {
+          var eparsed = {};
+          try { eparsed = JSON.parse(ebody); } catch(e) {}
+          var et = tabs.get(execMatch[1]);
+          if (!et) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+          try {
+            var result = executeInFrame(et.frame, eparsed.code);
+            res.writeHead(200);
+            res.end(JSON.stringify({ tabId: et.id, result: String(result) }));
+          } catch(e) {
+            res.writeHead(200);
+            res.end(JSON.stringify({ tabId: et.id, error: e.message }));
+          }
+        });
+        return;
+      }
+
+      if (url === '/api/shutdown' && req.method === 'POST') {
+        res.writeHead(200);
+        res.end(JSON.stringify({ status: 'shutting down' }));
+        setTimeout(function() { if (win) win.close(); }, 100);
+        return;
+      }
+
       res.writeHead(404);
-      res.end(JSON.stringify({ error: 'Not found' }));
+      res.end(JSON.stringify({ error: 'Not found', available: [
+        'GET /api/state', 'GET /api/tabs', 'POST /api/tabs',
+        'GET /api/tabs/:id', 'DELETE /api/tabs/:id',
+        'POST /api/tabs/:id/navigate', 'POST /api/tabs/:id/reload',
+        'POST /api/tabs/:id/activate', 'GET /api/tabs/:id/html',
+        'POST /api/tabs/:id/execute', 'POST /api/shutdown'
+      ]}));
     });
+
+    // ---- Server startup with EADDRINUSE fallback ----
+    var isBrowserInit = false;
+    function safeInitBrowser() {
+      if (isBrowserInit) return;
+      isBrowserInit = true;
+      initBrowser();
+    }
 
     server.on('error', function(err) {
       console.error('[Nightmare] Server error:', err.message);
-      if (err.code === 'EADDRINUSE') {
+      if (err.code === 'EADDRINUSE' && API_PORT !== 0) {
         console.warn('[Nightmare] Port ' + API_PORT + ' in use, trying dynamic port...');
-        server.listen(0, function() {
+        API_PORT = 0;
+        server.listen(0, '127.0.0.1', function() {
           API_PORT = server.address().port;
           console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT + ' (fallback)');
-          initBrowser();
+          safeInitBrowser();
         });
+      } else {
+        safeInitBrowser();
       }
     });
 
-    server.listen(API_PORT, function() {
+    server.listen(API_PORT, '127.0.0.1', function() {
       API_PORT = server.address().port;
       console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT);
-      initBrowser();
+      safeInitBrowser();
     });
 
-    // Graceful shutdown: free the port when window closes
-    win.on('close', function() {
-      try { server.close(); } catch(e) {}
-      win.close(true);
-    });
+    // ---- Graceful shutdown ----
+    if (win) {
+      win.on('close', function() {
+        try { server.close(); } catch(e) {}
+        win.close(true);
+      });
+    }
 
     // ---- Zone classification ----
     function classifyZone(url) {
@@ -276,9 +401,12 @@
     // ---- Bookmarks ----
     var BOOKMARKS = [
       { title: 'Home', url: 'nightmare://home' },
-      { title: 'New Tab', url: 'nightmare://newtab' },
-      { title: 'Settings', url: 'nightmare://settings' },
-      { title: 'History', url: 'nightmare://history' },
+      { title: 'Dreamwalker', url: 'nightmare://dreamwalker' },
+      { title: 'Port Hunter', url: 'nightmare://zombie-hunter' },
+      { title: 'Shadow Notes', url: 'nightmare://shadow-notes' },
+      { title: 'HN Archiver', url: 'nightmare://hn-shadow' },
+      { title: 'File Browser', url: 'nightmare://file-browser' },
+      { title: 'Telemetry', url: 'nightmare://telemetry' },
       { title: 'About', url: 'nightmare://about' },
     ];
 
@@ -472,6 +600,7 @@
       document.getElementById('nm-status-zone').textContent = tab ? 'Zone: ' + tab.zone : 'Ready';
       document.getElementById('nm-status-node').textContent = 'Node ' + process.version;
       document.getElementById('nm-status-tabs').textContent = tabs.size + ' tab' + (tabs.size !== 1 ? 's' : '');
+      document.getElementById('nm-status-port').textContent = 'API :' + API_PORT;
     }
 
     function updateWindowTitle() {
@@ -529,12 +658,15 @@
 
     document.getElementById('nm-new-tab').addEventListener('click', function() { createTab(); });
 
-    // ---- Window controls ----
-    document.getElementById('nm-btn-minimize').addEventListener('click', function() { win.minimize(); });
+    // ---- Window controls (null-safe) ----
+    document.getElementById('nm-btn-minimize').addEventListener('click', function() { if (win) win.minimize(); });
     document.getElementById('nm-btn-maximize').addEventListener('click', function() {
-      if (win.isMaximized) { win.unmaximize(); } else { win.maximize(); }
+      if (!win) return;
+      try {
+        if (win.isMaximized) { win.unmaximize(); } else { win.maximize(); }
+      } catch(e) { win.maximize(); }
     });
-    document.getElementById('nm-btn-close').addEventListener('click', function() { win.close(); });
+    document.getElementById('nm-btn-close').addEventListener('click', function() { if (win) win.close(); });
 
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', function(e) {
@@ -544,7 +676,7 @@
       if (ctrl && e.key === 'l') { e.preventDefault(); var u = document.getElementById('nm-url-input'); u.focus(); u.select(); }
       if (ctrl && e.key === 'r') { e.preventDefault(); var t = getActiveTab(); if (t) { t.frame.src = t.url; } }
       if (e.key === 'F5') { e.preventDefault(); var t2 = getActiveTab(); if (t2) { t2.frame.src = t2.url; } }
-      if (e.key === 'F12') { e.preventDefault(); win.showDevTools(); }
+      if (e.key === 'F12') { e.preventDefault(); if (win) win.showDevTools(); }
     });
 
     // ---- Init ----
@@ -555,7 +687,7 @@
         if (a.startsWith('--url=')) startUrl = a.replace('--url=', '');
       });
       createTab(startUrl || HOME_URL);
-      console.log('[Nightmare] Browser initialized');
+      console.log('[Nightmare] Browser initialized on port ' + API_PORT);
     }
   </script>
 </body>

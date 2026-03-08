@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HN Shadow Archiver // Nightmare</title>
+  <style>
+    :root {
+      --bg: #050508; --surface: #0e1020; --border: #1a1d2e;
+      --text: #f0eeeb; --dim: #585a64; --accent: #ff6600;
+      --red: #e63946; --green: #4ade80; --blue: #60a5fa;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Cascadia Code', 'JetBrains Mono', monospace;
+      padding: 32px; min-height: 100vh;
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px);
+    }
+
+    h1 { color: var(--accent); font-size: 28px; letter-spacing: 3px; text-transform: uppercase;
+      text-shadow: 0 0 15px rgba(255,102,0,0.4); margin-bottom: 4px; }
+    .subtitle { color: var(--dim); font-size: 11px; letter-spacing: 2px; margin-bottom: 24px; }
+
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 16px 20px; margin-bottom: 16px;
+      position: relative; overflow: hidden;
+    }
+    .panel::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.4;
+    }
+    .panel h2 { font-size: 10px; color: var(--accent); text-transform: uppercase;
+      letter-spacing: 3px; margin-bottom: 10px; }
+
+    .log-area {
+      background: #030305; border: 1px solid #0f1118; border-radius: 4px;
+      padding: 12px; max-height: 160px; overflow-y: auto; font-size: 10px; line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .log-info { color: var(--text); display: block; }
+    .log-warn { color: var(--accent); display: block; }
+    .log-ok { color: var(--green); display: block; }
+    .log-err { color: var(--red); display: block; }
+
+    .story {
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px;
+      padding: 14px 16px; margin-bottom: 10px;
+    }
+    .story-title { font-size: 13px; color: var(--text); font-weight: 700; margin-bottom: 4px; }
+    .story-meta { font-size: 10px; color: var(--dim); margin-bottom: 8px; }
+    .story-meta .score { color: var(--accent); }
+    .story-actions { display: flex; gap: 8px; }
+
+    button {
+      font-family: inherit; font-size: 9px; padding: 5px 10px;
+      border: 1px solid var(--accent); background: rgba(255,102,0,0.1);
+      color: var(--accent); border-radius: 3px; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 1px; transition: all 0.15s;
+    }
+    button:hover { background: var(--accent); color: var(--bg); }
+    button.green { border-color: var(--green); color: var(--green); background: rgba(74,222,128,0.1); }
+    button.green:hover { background: var(--green); color: var(--bg); }
+    button.blue { border-color: var(--blue); color: var(--blue); background: rgba(96,165,250,0.1); }
+    button.blue:hover { background: var(--blue); color: var(--bg); }
+
+    .vault-info { font-size: 10px; color: var(--green); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>HN Shadow Archiver</h1>
+  <div class="subtitle">Zero-CORS scraping + filesystem archival // nightmare://hn-shadow</div>
+
+  <div class="panel">
+    <h2>// Operations Log</h2>
+    <div id="logs" class="log-area">
+      <span class="log-info">Shadow Archiver initializing...</span>
+    </div>
+    <div id="vault-info" class="vault-info"></div>
+  </div>
+
+  <div id="feed"></div>
+
+  <script>
+    var fsModule = require('fs');
+    var pathModule = require('path');
+    var osModule = require('os');
+
+    var API_PORT = 6660;
+    try { API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10); } catch(e) {}
+    var API_BASE = 'http://127.0.0.1:' + API_PORT + '/api';
+
+    var vaultDir = pathModule.join(osModule.homedir(), 'Nightmare-Vault', 'HackerNews');
+    if (!fsModule.existsSync(vaultDir)) {
+      fsModule.mkdirSync(vaultDir, { recursive: true });
+    }
+
+    var logsEl = document.getElementById('logs');
+
+    function log(msg, cls) {
+      cls = cls || 'log-info';
+      var entry = document.createElement('span');
+      entry.className = cls;
+      entry.textContent = '[' + new Date().toLocaleTimeString('en-US', {hour12:false}) + '] ' + msg;
+      logsEl.appendChild(entry);
+      logsEl.scrollTop = logsEl.scrollHeight;
+    }
+
+    log('Vault mounted: ' + vaultDir, 'log-ok');
+    document.getElementById('vault-info').textContent = 'Vault: ' + vaultDir;
+
+    function loadStories() {
+      log('Fetching HN top stories...', 'log-warn');
+      fetch('https://hacker-news.firebaseio.com/v0/topstories.json')
+        .then(function(r) { return r.json(); })
+        .then(function(ids) {
+          var top15 = ids.slice(0, 15);
+          var feedEl = document.getElementById('feed');
+          feedEl.textContent = '';
+
+          var loaded = 0;
+          top15.forEach(function(id) {
+            fetch('https://hacker-news.firebaseio.com/v0/item/' + id + '.json')
+              .then(function(r) { return r.json(); })
+              .then(function(story) {
+                if (!story || !story.url) return;
+                renderStory(story);
+                loaded++;
+                if (loaded === top15.length) {
+                  log(loaded + ' stories loaded', 'log-ok');
+                }
+              });
+          });
+        })
+        .catch(function(err) {
+          log('Failed to fetch HN: ' + err.message, 'log-err');
+        });
+    }
+
+    function renderStory(story) {
+      var div = document.createElement('div');
+      div.className = 'story';
+
+      var title = document.createElement('div');
+      title.className = 'story-title';
+      title.textContent = story.title;
+      div.appendChild(title);
+
+      var meta = document.createElement('div');
+      meta.className = 'story-meta';
+      var scoreSpan = document.createElement('span');
+      scoreSpan.className = 'score';
+      scoreSpan.textContent = story.score + ' pts';
+      meta.appendChild(scoreSpan);
+      meta.appendChild(document.createTextNode(' // by ' + story.by + ' // '));
+      var urlSpan = document.createElement('span');
+      urlSpan.textContent = story.url.length > 60 ? story.url.substring(0, 60) + '...' : story.url;
+      meta.appendChild(urlSpan);
+      div.appendChild(meta);
+
+      var actions = document.createElement('div');
+      actions.className = 'story-actions';
+
+      var scrapeBtn = document.createElement('button');
+      scrapeBtn.textContent = 'Scrape + Save';
+      scrapeBtn.addEventListener('click', function() { ripArticle(story); });
+      actions.appendChild(scrapeBtn);
+
+      var commentsBtn = document.createElement('button');
+      commentsBtn.className = 'green';
+      commentsBtn.textContent = 'Open Comments Tab';
+      commentsBtn.addEventListener('click', function() { openComments(story.id); });
+      actions.appendChild(commentsBtn);
+
+      var openBtn = document.createElement('button');
+      openBtn.className = 'blue';
+      openBtn.textContent = 'Open Article Tab';
+      openBtn.addEventListener('click', function() { openArticle(story.url); });
+      actions.appendChild(openBtn);
+
+      div.appendChild(actions);
+      document.getElementById('feed').appendChild(div);
+    }
+
+    function ripArticle(story) {
+      log('Fetching: ' + story.url, 'log-warn');
+      fetch(story.url)
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+          log('Got ' + html.length + ' bytes, parsing...', 'log-info');
+          var parser = new DOMParser();
+          var doc = parser.parseFromString(html, 'text/html');
+          var paragraphs = Array.from(doc.querySelectorAll('p'))
+            .map(function(p) { return p.textContent.trim(); })
+            .filter(function(t) { return t.length > 30; });
+
+          if (paragraphs.length === 0) {
+            log('No extractable text from ' + story.url, 'log-err');
+            return;
+          }
+
+          var md = '# ' + story.title + '\n\n';
+          md += '**Source:** ' + story.url + '\n';
+          md += '**Score:** ' + story.score + ' | **By:** ' + story.by + '\n';
+          md += '**Archived:** ' + new Date().toISOString() + '\n\n---\n\n';
+          md += paragraphs.join('\n\n');
+
+          var safeTitle = story.title.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50);
+          var filePath = pathModule.join(vaultDir, safeTitle + '.md');
+          fsModule.writeFileSync(filePath, md, 'utf8');
+          log('SAVED: ' + filePath, 'log-ok');
+        })
+        .catch(function(err) {
+          log('Scrape failed: ' + err.message, 'log-err');
+        });
+    }
+
+    function openComments(id) {
+      log('Spawning comments tab via API...', 'log-info');
+      fetch(API_BASE + '/tabs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://news.ycombinator.com/item?id=' + id })
+      }).then(function() {
+        log('Comments tab spawned', 'log-ok');
+      }).catch(function(err) {
+        log('API call failed: ' + err.message, 'log-err');
+      });
+    }
+
+    function openArticle(url) {
+      fetch(API_BASE + '/tabs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url })
+      }).then(function() {
+        log('Article tab spawned', 'log-ok');
+      }).catch(function(err) {
+        log('API call failed: ' + err.message, 'log-err');
+      });
+    }
+
+    loadStories();
+  </script>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zombie Port Hunter // Nightmare</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap');
+
+    :root {
+      --bg: #050508; --surface: #0e1020; --border: #1a1d2e;
+      --text: #f0eeeb; --dim: #585a64; --accent: #e63946;
+      --green: #4ade80; --blue: #60a5fa; --yellow: #fbbf24;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Fira Code', monospace;
+      padding: 32px; min-height: 100vh;
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    }
+
+    h1 { color: var(--accent); font-size: 32px; letter-spacing: 4px; text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(230,57,70,0.5); margin-bottom: 4px; }
+    .subtitle { color: var(--dim); font-size: 12px; letter-spacing: 2px; margin-bottom: 32px; }
+
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px 24px; margin-bottom: 20px;
+      position: relative; overflow: hidden;
+    }
+    .panel::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.5;
+    }
+    .panel h2 { font-size: 11px; color: var(--accent); text-transform: uppercase;
+      letter-spacing: 3px; margin-bottom: 16px; }
+
+    .controls { display: flex; gap: 10px; margin-bottom: 16px; }
+    button {
+      font-family: 'Fira Code', monospace; font-size: 11px;
+      padding: 8px 16px; border-radius: 4px; cursor: pointer;
+      transition: all 0.15s; text-transform: uppercase; letter-spacing: 1px;
+      background: rgba(230,57,70,0.1); color: var(--accent); border: 1px solid var(--accent);
+    }
+    button:hover { background: var(--accent); color: var(--bg);
+      box-shadow: 0 0 20px rgba(230,57,70,0.4); }
+    button.green { background: rgba(74,222,128,0.1); color: var(--green); border-color: var(--green); }
+    button.green:hover { background: var(--green); color: var(--bg); }
+    button.danger { background: rgba(255,0,0,0.2); color: #ff4444; border-color: #ff4444; }
+    button.danger:hover { background: #ff4444; color: white; box-shadow: 0 0 30px rgba(255,0,0,0.5); }
+
+    .process-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px;
+      margin-bottom: 6px; background: rgba(0,0,0,0.3); font-size: 11px;
+    }
+    .process-name { color: var(--green); width: 120px; flex-shrink: 0; font-weight: 700; }
+    .process-pid { color: var(--yellow); width: 60px; flex-shrink: 0; }
+    .process-port { color: var(--blue); width: 100px; flex-shrink: 0; }
+    .process-addr { color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .process-row button { padding: 3px 10px; font-size: 9px; }
+
+    .status { font-size: 11px; color: var(--dim); margin-top: 12px; }
+    .status .count { color: var(--accent); font-weight: 700; }
+    .empty { color: var(--dim); font-size: 12px; text-align: center; padding: 24px; }
+    .scanning { color: var(--accent); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  </style>
+</head>
+<body>
+  <h1>Zombie Port Hunter</h1>
+  <div class="subtitle">Scan local ports // Find rogue processes // Eliminate zombies // nightmare://zombie-hunter</div>
+
+  <div class="panel">
+    <h2>// Controls</h2>
+    <div class="controls">
+      <button class="green" id="btn-scan">Scan Ports</button>
+      <button id="btn-scan-common">Scan Common Dev Ports</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>// Listening Processes</h2>
+    <div id="process-list"><span class="scanning">Scanning...</span></div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    var cpModule, osModule;
+    var hasNode = false;
+    try {
+      cpModule = require('child_process');
+      osModule = require('os');
+      hasNode = true;
+    } catch(e) {}
+
+    var listEl = document.getElementById('process-list');
+    var statusEl = document.getElementById('status');
+
+    function scanPorts() {
+      listEl.textContent = '';
+      var scanning = document.createElement('span');
+      scanning.className = 'scanning';
+      scanning.textContent = 'Scanning...';
+      listEl.appendChild(scanning);
+
+      if (!hasNode) {
+        listEl.textContent = 'Node.js not available in this zone.';
+        return;
+      }
+
+      setTimeout(function() {
+        try {
+          var output = cpModule.execFileSync('lsof', ['-i', '-P', '-n'], { encoding: 'utf8', timeout: 5000 });
+          var lines = output.split('\n').filter(function(l) { return l.indexOf('LISTEN') !== -1; });
+
+          listEl.textContent = '';
+
+          if (lines.length === 0) {
+            listEl.textContent = '';
+            var empty = document.createElement('div');
+            empty.className = 'empty';
+            empty.textContent = 'No listening processes found. The coast is clear.';
+            listEl.appendChild(empty);
+            statusEl.textContent = '0 zombies detected';
+            return;
+          }
+
+          lines.forEach(function(line) {
+            var parts = line.split(/\s+/);
+            var name = parts[0] || '?';
+            var pid = parts[1] || '?';
+            var addr = parts[8] || '?';
+            var portMatch = addr.match(/:(\d+)$/);
+            var port = portMatch ? portMatch[1] : '?';
+
+            var row = document.createElement('div');
+            row.className = 'process-row';
+
+            var nameEl = document.createElement('span');
+            nameEl.className = 'process-name';
+            nameEl.textContent = name;
+            row.appendChild(nameEl);
+
+            var pidEl = document.createElement('span');
+            pidEl.className = 'process-pid';
+            pidEl.textContent = 'PID:' + pid;
+            row.appendChild(pidEl);
+
+            var portEl = document.createElement('span');
+            portEl.className = 'process-port';
+            portEl.textContent = ':' + port;
+            row.appendChild(portEl);
+
+            var addrEl = document.createElement('span');
+            addrEl.className = 'process-addr';
+            addrEl.textContent = addr;
+            row.appendChild(addrEl);
+
+            var killBtn = document.createElement('button');
+            killBtn.className = 'danger';
+            killBtn.textContent = 'KILL';
+            killBtn.addEventListener('click', function() {
+              try {
+                process.kill(parseInt(pid, 10), 'SIGKILL');
+                row.style.opacity = '0.3';
+                row.style.textDecoration = 'line-through';
+                killBtn.textContent = 'DEAD';
+                killBtn.disabled = true;
+              } catch(e) {
+                killBtn.textContent = 'FAIL';
+                killBtn.style.color = '#fbbf24';
+              }
+            });
+            row.appendChild(killBtn);
+
+            listEl.appendChild(row);
+          });
+
+          var countSpan = document.createElement('span');
+          countSpan.className = 'count';
+          countSpan.textContent = lines.length;
+          statusEl.textContent = '';
+          statusEl.appendChild(countSpan);
+          statusEl.appendChild(document.createTextNode(' zombies detected across all ports'));
+
+        } catch(e) {
+          listEl.textContent = '';
+          var errEl = document.createElement('div');
+          errEl.className = 'empty';
+          errEl.textContent = 'Scan failed: ' + e.message;
+          listEl.appendChild(errEl);
+        }
+      }, 300);
+    }
+
+    function scanCommonPorts() {
+      listEl.textContent = '';
+      var scanning = document.createElement('span');
+      scanning.className = 'scanning';
+      scanning.textContent = 'Scanning common dev ports...';
+      listEl.appendChild(scanning);
+
+      if (!hasNode) {
+        listEl.textContent = 'Node.js not available.';
+        return;
+      }
+
+      var commonPorts = [3000, 3001, 4000, 4200, 5000, 5173, 5174, 8000, 8080, 8888, 9000, 6660];
+
+      setTimeout(function() {
+        listEl.textContent = '';
+        var found = 0;
+
+        commonPorts.forEach(function(port) {
+          try {
+            var output = cpModule.execFileSync('lsof', ['-i', ':' + port, '-P', '-n'], { encoding: 'utf8', timeout: 2000 });
+            var lines = output.split('\n').filter(function(l) { return l.indexOf('LISTEN') !== -1; });
+            lines.forEach(function(line) {
+              found++;
+              var parts = line.split(/\s+/);
+              var name = parts[0] || '?';
+              var pid = parts[1] || '?';
+
+              var row = document.createElement('div');
+              row.className = 'process-row';
+
+              var nameEl = document.createElement('span');
+              nameEl.className = 'process-name';
+              nameEl.textContent = name;
+              row.appendChild(nameEl);
+
+              var pidEl = document.createElement('span');
+              pidEl.className = 'process-pid';
+              pidEl.textContent = 'PID:' + pid;
+              row.appendChild(pidEl);
+
+              var portEl = document.createElement('span');
+              portEl.className = 'process-port';
+              portEl.textContent = ':' + port;
+              row.appendChild(portEl);
+
+              var addrEl = document.createElement('span');
+              addrEl.className = 'process-addr';
+              addrEl.textContent = parts[8] || '';
+              row.appendChild(addrEl);
+
+              var killBtn = document.createElement('button');
+              killBtn.className = 'danger';
+              killBtn.textContent = 'KILL';
+              killBtn.addEventListener('click', function() {
+                try {
+                  process.kill(parseInt(pid, 10), 'SIGKILL');
+                  row.style.opacity = '0.3';
+                  killBtn.textContent = 'DEAD';
+                  killBtn.disabled = true;
+                } catch(e) {
+                  killBtn.textContent = 'FAIL';
+                }
+              });
+              row.appendChild(killBtn);
+
+              listEl.appendChild(row);
+            });
+          } catch(e) { /* port not in use */ }
+        });
+
+        if (found === 0) {
+          var empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = 'All common dev ports are clear.';
+          listEl.appendChild(empty);
+        }
+
+        var countSpan = document.createElement('span');
+        countSpan.className = 'count';
+        countSpan.textContent = found;
+        statusEl.textContent = '';
+        statusEl.appendChild(countSpan);
+        statusEl.appendChild(document.createTextNode(' processes on common dev ports'));
+      }, 300);
+    }
+
+    document.getElementById('btn-scan').addEventListener('click', scanPorts);
+    document.getElementById('btn-scan-common').addEventListener('click', scanCommonPorts);
+
+    scanPorts();
+  </script>
+</body>
+</html>
