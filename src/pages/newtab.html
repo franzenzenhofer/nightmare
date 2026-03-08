@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Tab</title>
   <link rel="stylesheet" href="../styles/tokens.css">
   <style>
@@ -11,11 +10,12 @@
       background: var(--nm-bg-primary); color: var(--nm-text-primary);
       font-family: var(--nm-font-ui); display: flex;
       flex-direction: column; align-items: center;
-      padding-top: 18vh;
+      padding-top: 16vh;
     }
     .logo {
       font-size: 48px; font-weight: 700; letter-spacing: -2px;
       color: var(--nm-accent); margin-bottom: 32px;
+      text-shadow: 0 0 40px rgba(230,57,70,0.3);
     }
     .logo span { color: var(--nm-text-muted); font-weight: 300; }
     .search-bar {
@@ -29,50 +29,153 @@
       border-color: var(--nm-accent);
       box-shadow: 0 0 0 2px var(--nm-accent-glow);
     }
-    .section { width: 560px; max-width: 90vw; margin-top: 40px; }
+    .section { width: 560px; max-width: 90vw; margin-top: 36px; }
     .section-title {
       font-size: var(--nm-text-xs); color: var(--nm-text-muted);
       text-transform: uppercase; letter-spacing: 1.5px;
       margin-bottom: 12px; font-weight: 600;
     }
     .grid {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
     }
     .tile {
-      height: 72px; background: var(--nm-bg-secondary);
+      height: 80px; background: var(--nm-bg-secondary);
       border: 1px solid var(--nm-tab-border); border-radius: var(--nm-radius-md);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       color: var(--nm-text-secondary); font-size: var(--nm-text-xs);
-      cursor: pointer; transition: background 0.15s;
+      cursor: pointer; transition: all 0.15s;
+      padding: 8px; text-align: center; overflow: hidden;
     }
-    .tile:hover { background: var(--nm-bg-hover); color: var(--nm-text-primary); }
+    .tile:hover {
+      background: var(--nm-bg-hover); color: var(--nm-text-primary);
+      border-color: var(--nm-accent-dim);
+    }
     .tile-icon {
-      width: 24px; height: 24px; margin-bottom: 6px;
+      width: 28px; height: 28px; margin-bottom: 6px;
       background: var(--nm-bg-tertiary); border-radius: var(--nm-radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; color: var(--nm-accent);
     }
+    .tile-title {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .quick-links {
+      display: flex; gap: 16px; margin-top: 40px;
+      justify-content: center;
+    }
+    .quick-link {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      text-decoration: none; cursor: pointer;
+      padding: 4px 8px; border-radius: var(--nm-radius-sm);
+    }
+    .quick-link:hover { color: var(--nm-accent); background: var(--nm-bg-hover); }
   </style>
 </head>
 <body>
   <div class="logo">NIGHTMARE<span>.browser</span></div>
-  <input class="search-bar" type="text" placeholder="Search or enter URL" autofocus>
+  <input class="search-bar" id="search" type="text" placeholder="Search or enter URL" autofocus>
+
   <div class="section">
-    <div class="section-title">Most Visited</div>
-    <div class="grid" id="most-visited">
-      <div class="tile"><div class="tile-icon"></div>Site 1</div>
-      <div class="tile"><div class="tile-icon"></div>Site 2</div>
-      <div class="tile"><div class="tile-icon"></div>Site 3</div>
-      <div class="tile"><div class="tile-icon"></div>Site 4</div>
-    </div>
+    <div class="section-title">Quick Access</div>
+    <div class="grid" id="quick-access"></div>
   </div>
-  <div class="section">
-    <div class="section-title">Recently Bookmarked</div>
-    <div class="grid" id="recent-bookmarks">
-      <div class="tile"><div class="tile-icon"></div>Bookmark 1</div>
-      <div class="tile"><div class="tile-icon"></div>Bookmark 2</div>
-      <div class="tile"><div class="tile-icon"></div>Bookmark 3</div>
-      <div class="tile"><div class="tile-icon"></div>Bookmark 4</div>
-    </div>
+
+  <div class="section" id="bookmarks-section" style="display:none">
+    <div class="section-title">Recent Bookmarks</div>
+    <div class="grid" id="recent-bookmarks"></div>
   </div>
+
+  <div class="quick-links">
+    <span class="quick-link" data-url="nightmare://bookmarks">Bookmarks</span>
+    <span class="quick-link" data-url="nightmare://history">History</span>
+    <span class="quick-link" data-url="nightmare://settings">Settings</span>
+    <span class="quick-link" data-url="nightmare://about">About</span>
+  </div>
+
+  <script>
+    var fs, pathMod, os;
+    try { fs = require('fs'); pathMod = require('path'); os = require('os'); } catch(e) {}
+
+    var quickAccessEl = document.getElementById('quick-access');
+    var recentBmEl = document.getElementById('recent-bookmarks');
+
+    // Default quick-access tiles
+    var defaultTiles = [
+      { title: 'Home', url: 'nightmare://home', icon: '\u2302' },
+      { title: 'Dreamwalker', url: 'nightmare://dreamwalker', icon: '\u2604' },
+      { title: 'Port Hunter', url: 'nightmare://zombie-hunter', icon: '\u2620' },
+      { title: 'Shadow Notes', url: 'nightmare://shadow-notes', icon: '\u270E' },
+      { title: 'HN Archiver', url: 'nightmare://hn-shadow', icon: '\u2318' },
+      { title: 'File Browser', url: 'nightmare://file-browser', icon: '\u2603' },
+      { title: 'Telemetry', url: 'nightmare://telemetry', icon: '\u2637' },
+      { title: 'About', url: 'nightmare://about', icon: '\u24D8' }
+    ];
+
+    function createTile(item) {
+      var tile = document.createElement('div');
+      tile.className = 'tile';
+
+      var icon = document.createElement('div');
+      icon.className = 'tile-icon';
+      icon.textContent = item.icon || (item.title || '?')[0].toUpperCase();
+      tile.appendChild(icon);
+
+      var title = document.createElement('div');
+      title.className = 'tile-title';
+      title.textContent = item.title || item.url;
+      tile.appendChild(title);
+
+      tile.addEventListener('click', function() {
+        try {
+          window.top.postMessage({ type: 'nightmare-navigate', url: item.url }, '*');
+        } catch(e) {}
+      });
+      return tile;
+    }
+
+    // Render quick access
+    defaultTiles.forEach(function(t) {
+      quickAccessEl.appendChild(createTile(t));
+    });
+
+    // Load recent bookmarks
+    if (fs) {
+      try {
+        var dataDir = pathMod.join(os.homedir(), '.nightmare-browser');
+        var bmFile = pathMod.join(dataDir, 'bookmarks.json');
+        var bms = JSON.parse(fs.readFileSync(bmFile, 'utf8'));
+        if (bms.length > 0) {
+          document.getElementById('bookmarks-section').style.display = 'block';
+          bms.slice(-8).reverse().forEach(function(bm) {
+            recentBmEl.appendChild(createTile(bm));
+          });
+        }
+      } catch(e) {}
+    }
+
+    // Search bar navigation
+    document.getElementById('search').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        var val = this.value.trim();
+        if (val) {
+          try {
+            window.top.postMessage({ type: 'nightmare-navigate', url: val }, '*');
+          } catch(err) {}
+        }
+      }
+    });
+
+    // Quick links
+    document.querySelectorAll('.quick-link').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var url = this.getAttribute('data-url');
+        try {
+          window.top.postMessage({ type: 'nightmare-navigate', url: url }, '*');
+        } catch(e) {}
+      });
+    });
+  </script>
 </body>
 </html>

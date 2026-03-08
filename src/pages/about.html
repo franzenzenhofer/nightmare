@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About - Nightmare Browser</title>
   <link rel="stylesheet" href="../styles/tokens.css">
   <style>
@@ -14,35 +13,52 @@
       align-items: center; justify-content: center;
     }
     .about-card {
-      text-align: center; max-width: 400px; padding: 40px;
+      text-align: center; max-width: 460px; padding: 40px;
     }
     .logo {
-      font-size: 36px; font-weight: 700; letter-spacing: -1.5px;
-      color: var(--nm-accent); margin-bottom: 8px;
+      font-size: 42px; font-weight: 700; letter-spacing: -1.5px;
+      color: var(--nm-accent); margin-bottom: 4px;
+      text-shadow: 0 0 30px rgba(230,57,70,0.4);
     }
+    .logo span { color: var(--nm-text-muted); font-weight: 300; font-size: 28px; }
     .version {
       font-size: var(--nm-text-sm); color: var(--nm-text-muted);
-      font-family: var(--nm-font-mono); margin-bottom: 24px;
+      font-family: var(--nm-font-mono); margin-bottom: 16px;
     }
     .tagline {
-      font-size: 15px; color: var(--nm-text-secondary);
-      margin-bottom: 32px; line-height: 1.5;
+      font-size: 14px; color: var(--nm-text-secondary);
+      margin-bottom: 28px; line-height: 1.6;
     }
+    .tagline strong { color: var(--nm-zone-web-fg); }
     .info-table {
       width: 100%; border-collapse: collapse;
-      margin-bottom: 32px; text-align: left;
+      margin-bottom: 28px; text-align: left;
     }
     .info-table td {
       padding: 8px 0; font-size: var(--nm-text-sm);
       border-bottom: 1px solid var(--nm-tab-border);
     }
     .info-table td:first-child {
-      color: var(--nm-text-muted); width: 120px;
+      color: var(--nm-text-muted); width: 130px;
     }
     .info-table td:last-child {
       color: var(--nm-text-primary);
       font-family: var(--nm-font-mono);
     }
+    .philosophy {
+      text-align: left; margin-bottom: 28px;
+      padding: 16px; background: var(--nm-bg-secondary);
+      border: 1px solid var(--nm-tab-border);
+      border-radius: var(--nm-radius-md);
+      font-size: var(--nm-text-sm); line-height: 1.7;
+      color: var(--nm-text-secondary);
+    }
+    .philosophy h3 {
+      color: var(--nm-accent); font-size: 12px;
+      text-transform: uppercase; letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    .philosophy .danger { color: var(--nm-zone-web-fg); font-weight: 700; }
     .credits {
       font-size: var(--nm-text-xs); color: var(--nm-text-muted);
       line-height: 1.6;
@@ -51,35 +67,71 @@
       color: var(--nm-accent); text-decoration: none;
     }
     .credits a:hover { text-decoration: underline; }
+    .shortcut-table {
+      width: 100%; border-collapse: collapse;
+      margin-bottom: 28px; text-align: left;
+    }
+    .shortcut-table th {
+      font-size: 10px; color: var(--nm-text-muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      padding: 4px 0 8px; border-bottom: 1px solid var(--nm-tab-border);
+    }
+    .shortcut-table td {
+      padding: 5px 0; font-size: var(--nm-text-xs);
+      border-bottom: 1px solid rgba(26,29,46,0.5);
+    }
+    .shortcut-table td:first-child {
+      font-family: var(--nm-font-mono); color: var(--nm-accent);
+      width: 140px;
+    }
+    .shortcut-table td:last-child { color: var(--nm-text-secondary); }
   </style>
 </head>
 <body>
   <div class="about-card">
-    <div class="logo">NIGHTMARE</div>
-    <div class="version">v0.1.0</div>
-    <div class="tagline">AI-first browser built on NW.js</div>
+    <div class="logo">NIGHTMARE<span>.browser</span></div>
+    <div class="version" id="version-text">v1.0.0</div>
+    <div class="tagline">
+      AI-first browser with <strong>full Node.js in every page</strong>.<br>
+      Zero CORS. Zero sandbox. Full system access.
+    </div>
+
     <table class="info-table">
-      <tr>
-        <td>Runtime</td>
-        <td>NW.js</td>
-      </tr>
-      <tr>
-        <td>Node.js</td>
-        <td id="node-version">--</td>
-      </tr>
-      <tr>
-        <td>Chromium</td>
-        <td id="chromium-version">--</td>
-      </tr>
-      <tr>
-        <td>Platform</td>
-        <td id="platform">--</td>
-      </tr>
+      <tr><td>Runtime</td><td>NW.js</td></tr>
+      <tr><td>Node.js</td><td id="node-version">--</td></tr>
+      <tr><td>Chromium</td><td id="chromium-version">--</td></tr>
+      <tr><td>Platform</td><td id="platform">--</td></tr>
+      <tr><td>API Port</td><td id="api-port">--</td></tr>
+      <tr><td>PID</td><td id="pid">--</td></tr>
+      <tr><td>Uptime</td><td id="uptime">--</td></tr>
     </table>
+
+    <div class="philosophy">
+      <h3>The Nightmare Philosophy</h3>
+      Every webpage gets <span class="danger">full Node.js access</span>: require(), fs, child_process, process.
+      There is no sandbox. There is no CSP. Any page can read your filesystem, execute commands, and do anything Node.js can do.
+      The red danger banner warns you, but it cannot be dismissed.
+      <br><br>
+      This is an experiment: what happens when a browser has zero restrictions?
+    </div>
+
+    <table class="shortcut-table">
+      <tr><th>Shortcut</th><th>Action</th></tr>
+      <tr><td>Ctrl/Cmd+T</td><td>New Tab</td></tr>
+      <tr><td>Ctrl/Cmd+W</td><td>Close Tab</td></tr>
+      <tr><td>Ctrl/Cmd+L</td><td>Focus URL Bar</td></tr>
+      <tr><td>Ctrl/Cmd+R / F5</td><td>Reload</td></tr>
+      <tr><td>Ctrl/Cmd+D</td><td>Bookmark Page</td></tr>
+      <tr><td>Ctrl/Cmd+F</td><td>Find in Page</td></tr>
+      <tr><td>Ctrl/Cmd+H</td><td>History</td></tr>
+      <tr><td>Ctrl/Cmd+Shift+B</td><td>Bookmarks</td></tr>
+      <tr><td>F12</td><td>Developer Tools</td></tr>
+    </table>
+
     <div class="credits">
       Built with NW.js and Chromium.<br>
-      Designed for developers and AI workflows.<br>
-      <a href="https://github.com/nicejsapp/nicejs">github.com/nicejsapp/nicejs</a>
+      Designed for AI agents and developers.<br>
+      <a href="https://github.com/franzenzenhofer/nightmare">github.com/franzenzenhofer/nightmare</a>
     </div>
   </div>
   <script>
@@ -89,6 +141,15 @@
         navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '--';
       document.getElementById('platform').textContent =
         process.platform + ' ' + process.arch;
+      document.getElementById('api-port').textContent =
+        process.env.NIGHTMARE_API_PORT || '6660';
+      document.getElementById('pid').textContent = process.pid;
+      var secs = Math.floor(process.uptime());
+      var h = Math.floor(secs / 3600);
+      var m = Math.floor((secs % 3600) / 60);
+      var s = secs % 60;
+      document.getElementById('uptime').textContent =
+        (h > 0 ? h + 'h ' : '') + m + 'm ' + s + 's';
     } catch (e) {
       /* Not running in NW.js context */
     }

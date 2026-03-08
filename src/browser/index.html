@@ -90,6 +90,59 @@
     var dismissedBanners = new Set();
     var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
     var navState = new Map(); // tabId -> { depth, forwardDepth, openerId, lastUrl, isBackForward }
+    var findBarVisible = false;
+
+    // ---- Persistent data directory ----
+    var _dataDir = path.join(os.homedir(), '.nightmare-browser');
+    if (!fs.existsSync(_dataDir)) fs.mkdirSync(_dataDir, { recursive: true });
+
+    function loadJsonFile(name) {
+      try { return JSON.parse(fs.readFileSync(path.join(_dataDir, name), 'utf8')); }
+      catch(e) { return []; }
+    }
+    function saveJsonFile(name, data) {
+      fs.writeFileSync(path.join(_dataDir, name), JSON.stringify(data, null, 2), 'utf8');
+    }
+
+    // ---- Persistent bookmarks ----
+    var userBookmarks = loadJsonFile('bookmarks.json');
+
+    function isBookmarked(url) {
+      var display = toDisplayUrl(url);
+      return userBookmarks.some(function(b) { return b.url === url || b.url === display; });
+    }
+    function addBookmark(url, title) {
+      if (isBookmarked(url)) return;
+      var display = toDisplayUrl(url);
+      userBookmarks.push({ title: title || display, url: display, createdAt: new Date().toISOString() });
+      saveJsonFile('bookmarks.json', userBookmarks);
+      updateBookmarkButton();
+      renderBookmarks();
+    }
+    function removeBookmark(url) {
+      var display = toDisplayUrl(url);
+      userBookmarks = userBookmarks.filter(function(b) { return b.url !== url && b.url !== display; });
+      saveJsonFile('bookmarks.json', userBookmarks);
+      updateBookmarkButton();
+      renderBookmarks();
+    }
+
+    // ---- Persistent history ----
+    var browsingHistory = loadJsonFile('history.json');
+
+    function recordHistory(url, title) {
+      var display = toDisplayUrl(url);
+      // Skip internal pages and empty URLs
+      if (!url || url === 'about:blank') return;
+      browsingHistory.unshift({ url: display, title: title || display, visitedAt: new Date().toISOString(), displayUrl: display });
+      // Cap at 5000
+      if (browsingHistory.length > 5000) browsingHistory = browsingHistory.slice(0, 5000);
+      saveJsonFile('history.json', browsingHistory);
+    }
+
+    // ---- Settings ----
+    var userSettings = {};
+    try { userSettings = JSON.parse(fs.readFileSync(path.join(_dataDir, 'settings.json'), 'utf8')); } catch(e) {}
 
     // NW.js inline scripts don't have __dirname — derive paths from process.cwd()
     var _srcDir = process.cwd();
@@ -688,6 +741,32 @@
         return;
       }
 
+      // ---- Bookmarks API ----
+      if (url === '/api/bookmarks' && req.method === 'GET') {
+        res.writeHead(200);
+        res.end(JSON.stringify(userBookmarks));
+        return;
+      }
+      if (url === '/api/bookmarks' && req.method === 'POST') {
+        var bbody = '';
+        req.on('data', function(c) { bbody += c; });
+        req.on('end', function() {
+          var bparsed = {};
+          try { bparsed = JSON.parse(bbody); } catch(e) {}
+          addBookmark(bparsed.url, bparsed.title);
+          res.writeHead(201);
+          res.end(JSON.stringify({ added: true }));
+        });
+        return;
+      }
+
+      // ---- History API ----
+      if (url === '/api/history' && req.method === 'GET') {
+        res.writeHead(200);
+        res.end(JSON.stringify(browsingHistory.slice(0, 100)));
+        return;
+      }
+
       // ---- Back/Forward/Reload via API ----
       var backMatch = url.match(/^\/api\/tabs\/([^/]+)\/back$/);
       if (backMatch && req.method === 'POST') {
@@ -735,8 +814,10 @@
         'POST /api/tabs/:id/click', 'POST /api/tabs/:id/type',
         'POST /api/tabs/:id/find', 'POST /api/tabs/:id/scroll',
         'POST /api/tabs/:id/back', 'POST /api/tabs/:id/forward',
-        'GET /api/screenshot?width=W&height=H&format=png|jpeg',
-        'POST /api/resize', 'POST /api/shutdown'
+        'GET /api/screenshot', 'POST /api/resize',
+        'GET /api/bookmarks', 'POST /api/bookmarks',
+        'GET /api/history',
+        'POST /api/shutdown'
       ]}));
     });
 
@@ -814,8 +895,7 @@
       if (input.startsWith('nightmare://')) {
         var pageName = input.replace('nightmare://', '');
         if (pageName === 'home') return localFileUrl(path.join(samplesDir, 'hello.html'));
-        // nightmare://about → show README.md
-        if (pageName === 'about') return localFileUrl(path.join(_projectDir, 'README.md'));
+        if (pageName === 'about') return localFileUrl(path.join(pagesDir, 'about.html'));
         var samplePath = path.join(samplesDir, pageName + '.html');
         if (fs.existsSync(samplePath)) return localFileUrl(samplePath);
         var pagePath = path.join(pagesDir, pageName + '.html');
@@ -847,16 +927,17 @@
     }
 
     // ---- Bookmarks ----
-    var BOOKMARKS = [
+    var DEFAULT_BOOKMARKS = [
       { title: 'Home', url: 'nightmare://home' },
       { title: 'Dreamwalker', url: 'nightmare://dreamwalker' },
       { title: 'Port Hunter', url: 'nightmare://zombie-hunter' },
       { title: 'Shadow Notes', url: 'nightmare://shadow-notes' },
       { title: 'HN Archiver', url: 'nightmare://hn-shadow' },
       { title: 'File Browser', url: 'nightmare://file-browser' },
-      { title: 'Telemetry', url: 'nightmare://telemetry' },
-      { title: 'About', url: 'nightmare://about' },
     ];
+    function getBarBookmarks() {
+      return DEFAULT_BOOKMARKS.concat(userBookmarks.slice(-10));
+    }
 
     // ---- Navigate a tab (recreates iframe if zone changes) ----
     function navigateTab(tab, newUrl) {
@@ -895,18 +976,120 @@
     function renderBookmarks() {
       var bar = document.getElementById('nm-bookmarks-bar');
       while (bar.firstChild) bar.removeChild(bar.firstChild);
-      BOOKMARKS.forEach(function(bm) {
+      getBarBookmarks().forEach(function(bm) {
         var el = document.createElement('span');
         el.className = 'nm-bookmark';
         el.textContent = bm.title;
+        el.title = bm.url;
         el.addEventListener('click', function() {
           var tab = getActiveTab();
-          if (tab) {
-            navigateTab(tab, resolveUrl(bm.url));
-          }
+          if (tab) navigateTab(tab, resolveUrl(bm.url));
+        });
+        el.addEventListener('contextmenu', function(e) {
+          e.preventDefault();
+          showContextMenu(e.clientX, e.clientY, [
+            { label: 'Open in New Tab', action: function() { createTab(bm.url); } },
+            { label: 'Remove', action: function() {
+              removeBookmark(bm.url);
+            }}
+          ]);
         });
         bar.appendChild(el);
       });
+    }
+
+    // ---- Inject right-click context menu into iframe ----
+    function injectContextMenu(tab, frame) {
+      try {
+        var doc = frame.contentDocument;
+        if (!doc) return;
+        doc.addEventListener('contextmenu', function(e) {
+          e.preventDefault();
+          // Collect info about what was right-clicked
+          var target = e.target;
+          var linkEl = target.closest ? target.closest('a[href]') : null;
+          var imgEl = target.closest ? target.closest('img[src]') : null;
+          var selectedText = '';
+          try { selectedText = frame.contentWindow.getSelection().toString(); } catch(err) {}
+
+          // Calculate position relative to the browser window
+          var frameRect = frame.getBoundingClientRect();
+          var mx = e.clientX + frameRect.left;
+          var my = e.clientY + frameRect.top;
+
+          var navSt = navState.get(tab.id);
+          var canBack = navSt && (navSt.depth > 0 || (navSt.openerId && tabs.has(navSt.openerId)));
+          var canFwd = navSt && navSt.forwardDepth > 0;
+          var displayUrl = toDisplayUrl(tab.url);
+
+          var menuItems = [
+            { label: 'Back', shortcut: '\u2318\u2190', disabled: !canBack, action: function() { document.getElementById('nm-btn-back').click(); } },
+            { label: 'Forward', shortcut: '\u2318\u2192', disabled: !canFwd, action: function() { document.getElementById('nm-btn-forward').click(); } },
+            { label: 'Reload', shortcut: '\u2318R', action: function() { tab.frame.src = tab.url; } },
+            { separator: true },
+          ];
+
+          // Link context items
+          if (linkEl) {
+            var linkHref = linkEl.href;
+            menuItems.push({ label: 'Open Link in New Tab', action: function() { createTab(linkHref); } });
+            menuItems.push({ label: 'Copy Link Address', action: function() {
+              try { var cb = require('nw.gui').Clipboard.get(); cb.set(linkHref, 'text'); }
+              catch(err) { try { navigator.clipboard.writeText(linkHref); } catch(e2) {} }
+            }});
+            menuItems.push({ separator: true });
+          }
+
+          // Image context items
+          if (imgEl) {
+            var imgSrc = imgEl.src;
+            menuItems.push({ label: 'Open Image in New Tab', action: function() { createTab(imgSrc); } });
+            menuItems.push({ label: 'Copy Image Address', action: function() {
+              try { var cb = require('nw.gui').Clipboard.get(); cb.set(imgSrc, 'text'); }
+              catch(err) { try { navigator.clipboard.writeText(imgSrc); } catch(e2) {} }
+            }});
+            menuItems.push({ separator: true });
+          }
+
+          // Selection context items
+          if (selectedText) {
+            var searchQuery = selectedText.substring(0, 80);
+            menuItems.push({ label: 'Copy', action: function() {
+              try { var cb = require('nw.gui').Clipboard.get(); cb.set(selectedText, 'text'); }
+              catch(err) { try { navigator.clipboard.writeText(selectedText); } catch(e2) {} }
+            }});
+            menuItems.push({ label: 'Search Google for "' + (searchQuery.length > 30 ? searchQuery.substring(0, 30) + '...' : searchQuery) + '"', action: function() {
+              createTab('https://www.google.com/search?q=' + encodeURIComponent(searchQuery));
+            }});
+            menuItems.push({ separator: true });
+          }
+
+          // Standard items
+          menuItems.push({ label: isBookmarked(tab.url) ? 'Remove Bookmark' : 'Bookmark This Page', shortcut: '\u2318D', action: function() {
+            if (isBookmarked(tab.url)) removeBookmark(tab.url);
+            else addBookmark(tab.url, tab.title);
+          }});
+          menuItems.push({ separator: true });
+          menuItems.push({ label: 'Copy Page URL', action: function() {
+            try { var cb = require('nw.gui').Clipboard.get(); cb.set(displayUrl, 'text'); }
+            catch(err) { try { navigator.clipboard.writeText(displayUrl); } catch(e2) {} }
+          }});
+          menuItems.push({ label: 'View Page Source', action: function() {
+            try {
+              var html = frame.contentDocument.documentElement.outerHTML;
+              var blob = new Blob([html], { type: 'text/plain' });
+              createTab(URL.createObjectURL(blob));
+            } catch(err) {}
+          }});
+          menuItems.push({ label: 'Find in Page', shortcut: '\u2318F', action: function() { toggleFindBar(); } });
+          menuItems.push({ separator: true });
+          menuItems.push({ label: 'Inspect Element', shortcut: 'F12', action: function() { if (win) win.showDevTools(); } });
+
+          showContextMenu(mx, my, menuItems);
+        });
+      } catch(e) {
+        // Cross-origin — cannot inject context menu
+      }
     }
 
     // ---- Shared frame event listener (iframe only — all zones use iframe + nwfaketop) ----
@@ -927,6 +1110,12 @@
         tab.titleSpan.textContent = tab.title.length > 30 ? tab.title.substring(0, 30) + '...' : tab.title;
         tab.loading = false;
         tab.tabEl.classList.remove('nm-tab-loading');
+
+        // Inject right-click context menu into the iframe
+        injectContextMenu(tab, frame);
+
+        // Record in browsing history
+        recordHistory(tab.url, tab.title);
 
         // Track navigation in navState
         var state = navState.get(tab.id);
@@ -1058,6 +1247,7 @@
     function updateAll() {
       updateNavBar();
       updateNavButtons();
+      updateBookmarkButton();
       updateBanner();
       updateStatusBar();
       updateWindowTitle();
@@ -1215,6 +1405,209 @@
     document.getElementById('nm-btn-close').addEventListener('click', function() { if (win) win.close(); });
     document.getElementById('nm-btn-devtools').addEventListener('click', function() { if (win) win.showDevTools(); });
 
+    // ---- Bookmark button (star) ----
+    document.getElementById('nm-btn-bookmark').addEventListener('click', function() {
+      var tab = getActiveTab();
+      if (!tab) return;
+      if (isBookmarked(tab.url)) {
+        removeBookmark(tab.url);
+      } else {
+        addBookmark(tab.url, tab.title);
+      }
+    });
+    function updateBookmarkButton() {
+      var tab = getActiveTab();
+      var btn = document.getElementById('nm-btn-bookmark');
+      if (!tab) return;
+      if (isBookmarked(tab.url)) {
+        btn.textContent = '\u2605'; // filled star
+        btn.title = 'Remove bookmark';
+        btn.style.color = '#fbbf24';
+      } else {
+        btn.textContent = '\u2606'; // empty star
+        btn.title = 'Bookmark this page';
+        btn.style.color = '';
+      }
+    }
+
+    // ---- Find in page ----
+    function toggleFindBar() {
+      var existing = document.getElementById('nm-find-bar');
+      if (existing) {
+        existing.remove();
+        findBarVisible = false;
+        return;
+      }
+      findBarVisible = true;
+      var bar = document.createElement('div');
+      bar.id = 'nm-find-bar';
+      bar.style.cssText = 'position:fixed;top:80px;right:20px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:8px 12px;z-index:9999;display:flex;gap:8px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Find in page...';
+      input.style.cssText = 'width:200px;height:28px;background:#08090f;border:1px solid #333;border-radius:4px;padding:0 8px;color:#f0eeeb;font-family:inherit;font-size:13px;outline:none;';
+      bar.appendChild(input);
+
+      var countSpan = document.createElement('span');
+      countSpan.style.cssText = 'font-size:11px;color:#585a64;min-width:40px;';
+      bar.appendChild(countSpan);
+
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '\u2715';
+      closeBtn.style.cssText = 'background:none;border:none;color:#585a64;cursor:pointer;font-size:14px;padding:2px 6px;';
+      closeBtn.addEventListener('click', function() { bar.remove(); findBarVisible = false; clearFindHighlights(); });
+      bar.appendChild(closeBtn);
+
+      document.body.appendChild(bar);
+      input.focus();
+
+      var searchTimer = null;
+      input.addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        var q = input.value;
+        searchTimer = setTimeout(function() { doFind(q, countSpan); }, 150);
+      });
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { bar.remove(); findBarVisible = false; clearFindHighlights(); }
+        if (e.key === 'Enter') { doFind(input.value, countSpan); }
+      });
+    }
+
+    function doFind(query, countEl) {
+      clearFindHighlights();
+      if (!query) { countEl.textContent = ''; return; }
+      var tab = getActiveTab();
+      if (!tab) return;
+      try {
+        var frameWin = tab.frame.contentWindow;
+        // Use native window.find for highlight
+        var found = frameWin.find(query, false, false, true, false, false, false);
+        if (found) {
+          countEl.textContent = 'Found';
+          countEl.style.color = '#4ade80';
+        } else {
+          countEl.textContent = 'No match';
+          countEl.style.color = '#ff4444';
+        }
+      } catch(e) {
+        countEl.textContent = 'Error';
+        countEl.style.color = '#ff4444';
+      }
+    }
+
+    function clearFindHighlights() {
+      var tab = getActiveTab();
+      if (!tab) return;
+      try { tab.frame.contentWindow.getSelection().removeAllRanges(); } catch(e) {}
+    }
+
+    // ---- Shared context menu helper ----
+    function showContextMenu(x, y, items) {
+      var existing = document.getElementById('nm-context-menu');
+      if (existing) existing.remove();
+
+      var menu = document.createElement('div');
+      menu.id = 'nm-context-menu';
+      menu.style.cssText = 'position:fixed;top:' + y + 'px;left:' + x + 'px;background:#12142a;border:1px solid #2a2d44;border-radius:6px;padding:4px 0;z-index:9999;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,0.7);font-size:13px;font-family:inherit;';
+
+      items.forEach(function(item) {
+        if (item.separator) {
+          var sep = document.createElement('div');
+          sep.style.cssText = 'height:1px;background:#2a2d44;margin:4px 0;';
+          menu.appendChild(sep);
+          return;
+        }
+        var el = document.createElement('div');
+        el.style.cssText = 'padding:7px 16px;cursor:pointer;color:#d0d0d8;display:flex;justify-content:space-between;align-items:center;';
+        if (item.disabled) {
+          el.style.opacity = '0.4';
+          el.style.cursor = 'default';
+        }
+        var labelSpan = document.createElement('span');
+        labelSpan.textContent = item.label;
+        el.appendChild(labelSpan);
+        if (item.shortcut) {
+          var scSpan = document.createElement('span');
+          scSpan.textContent = item.shortcut;
+          scSpan.style.cssText = 'font-size:11px;color:#585a64;margin-left:24px;';
+          el.appendChild(scSpan);
+        }
+        if (!item.disabled) {
+          el.addEventListener('mouseenter', function() { el.style.background = '#1e2248'; });
+          el.addEventListener('mouseleave', function() { el.style.background = 'none'; });
+          el.addEventListener('click', function() { item.action(); menu.remove(); });
+        }
+        menu.appendChild(el);
+      });
+
+      // Clamp to viewport
+      document.body.appendChild(menu);
+      var rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+      if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+
+      var removeMenu = function(e) {
+        if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', removeMenu); }
+      };
+      setTimeout(function() { document.addEventListener('mousedown', removeMenu); }, 0);
+    }
+
+    // ---- Page right-click context menu ----
+    document.getElementById('nm-content-area').addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      var tab = getActiveTab();
+      if (!tab) return;
+
+      var navSt = navState.get(tab.id);
+      var canBack = navSt && (navSt.depth > 0 || (navSt.openerId && tabs.has(navSt.openerId)));
+      var canFwd = navSt && navSt.forwardDepth > 0;
+      var displayUrl = toDisplayUrl(tab.url);
+
+      var menuItems = [
+        { label: 'Back', shortcut: '\u2318\u2190', disabled: !canBack, action: function() { document.getElementById('nm-btn-back').click(); } },
+        { label: 'Forward', shortcut: '\u2318\u2192', disabled: !canFwd, action: function() { document.getElementById('nm-btn-forward').click(); } },
+        { label: 'Reload', shortcut: '\u2318R', action: function() { tab.frame.src = tab.url; } },
+        { separator: true },
+        { label: isBookmarked(tab.url) ? 'Remove Bookmark' : 'Bookmark This Page', shortcut: '\u2318D', action: function() {
+          if (isBookmarked(tab.url)) removeBookmark(tab.url);
+          else addBookmark(tab.url, tab.title);
+        }},
+        { separator: true },
+        { label: 'Copy URL', action: function() {
+          try {
+            var clipboard = require('nw.gui').Clipboard.get();
+            clipboard.set(displayUrl, 'text');
+          } catch(err) {
+            try { navigator.clipboard.writeText(displayUrl); } catch(e2) {}
+          }
+        }},
+        { label: 'Copy Page Title', action: function() {
+          try {
+            var clipboard = require('nw.gui').Clipboard.get();
+            clipboard.set(tab.title, 'text');
+          } catch(err) {
+            try { navigator.clipboard.writeText(tab.title); } catch(e2) {}
+          }
+        }},
+        { separator: true },
+        { label: 'View Page Source', action: function() {
+          try {
+            var html = tab.frame.contentDocument.documentElement.outerHTML;
+            var blob = new Blob([html], { type: 'text/plain' });
+            var srcUrl = URL.createObjectURL(blob);
+            createTab(srcUrl);
+          } catch(err) {}
+        }},
+        { label: 'Find in Page', shortcut: '\u2318F', action: function() { toggleFindBar(); } },
+        { separator: true },
+        { label: 'Open in New Tab', action: function() { createTab(tab.url); } },
+        { label: 'Inspect Element', shortcut: 'F12', action: function() { if (win) win.showDevTools(); } },
+      ];
+
+      showContextMenu(e.clientX, e.clientY, menuItems);
+    });
+
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', function(e) {
       var ctrl = e.ctrlKey || e.metaKey;
@@ -1222,8 +1615,26 @@
       if (ctrl && e.key === 'w') { e.preventDefault(); if (activeTabId) closeTab(activeTabId); }
       if (ctrl && e.key === 'l') { e.preventDefault(); var u = document.getElementById('nm-url-input'); u.focus(); u.select(); }
       if (ctrl && e.key === 'r') { e.preventDefault(); var t = getActiveTab(); if (t) { t.frame.src = t.url; } }
+      if (ctrl && e.key === 'd') { e.preventDefault(); document.getElementById('nm-btn-bookmark').click(); }
+      if (ctrl && e.key === 'f') { e.preventDefault(); toggleFindBar(); }
+      if (ctrl && e.key === 'h') { e.preventDefault(); createTab('nightmare://history'); }
+      if (ctrl && e.shiftKey && e.key === 'B') { e.preventDefault(); createTab('nightmare://bookmarks'); }
+      if (ctrl && e.key === ',') { e.preventDefault(); createTab('nightmare://settings'); }
       if (e.key === 'F5') { e.preventDefault(); var t2 = getActiveTab(); if (t2) { t2.frame.src = t2.url; } }
       if (e.key === 'F12') { e.preventDefault(); if (win) win.showDevTools(); }
+      if (e.key === 'Escape') {
+        var fb = document.getElementById('nm-find-bar');
+        if (fb) { fb.remove(); findBarVisible = false; clearFindHighlights(); }
+        var cm = document.getElementById('nm-context-menu');
+        if (cm) cm.remove();
+      }
+      // Tab switching with Ctrl+1-9
+      if (ctrl && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        var idx = parseInt(e.key, 10) - 1;
+        var tabIds = Array.from(tabs.keys());
+        if (idx < tabIds.length) activateTab(tabIds[idx]);
+      }
     });
 
     // ---- Tab context menu ----
@@ -1235,37 +1646,34 @@
       var tab = tabs.get(tabId);
       if (!tab) return;
 
-      // Remove any existing context menu
-      var existing = document.getElementById('nm-context-menu');
-      if (existing) existing.remove();
-
-      var menu = document.createElement('div');
-      menu.id = 'nm-context-menu';
-      menu.style.cssText = 'position:fixed;top:' + e.clientY + 'px;left:' + e.clientX + 'px;background:#1a1a2e;border:1px solid #333;border-radius:4px;padding:4px 0;z-index:9999;min-width:160px;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-size:13px;';
-
-      var items = [
+      showContextMenu(e.clientX, e.clientY, [
         { label: 'Duplicate Tab', action: function() { createTab(tab.url); } },
         { label: tab.tabEl.classList.contains('nm-tab-pinned') ? 'Unpin Tab' : 'Pin Tab', action: function() { tab.tabEl.classList.toggle('nm-tab-pinned'); } },
+        { separator: true },
+        { label: 'Reload Tab', action: function() { tab.frame.src = tab.url; } },
+        { label: 'Copy Tab URL', action: function() {
+          try { var clipboard = require('nw.gui').Clipboard.get(); clipboard.set(toDisplayUrl(tab.url), 'text'); } catch(err) {}
+        }},
+        { separator: true },
         { label: 'Close Tab', action: function() { closeTab(tabId); } },
         { label: 'Close Other Tabs', action: function() {
           var allIds = Array.from(tabs.keys());
           allIds.forEach(function(tid) { if (tid !== tabId) closeTab(tid); });
         }},
-      ];
+        { label: 'Close Tabs to the Right', action: function() {
+          var allIds = Array.from(tabs.keys());
+          var startIdx = allIds.indexOf(tabId);
+          for (var i = allIds.length - 1; i > startIdx; i--) closeTab(allIds[i]);
+        }},
+      ]);
+    });
 
-      items.forEach(function(item) {
-        var el = document.createElement('div');
-        el.textContent = item.label;
-        el.style.cssText = 'padding:6px 16px;cursor:pointer;color:#e0e0e8;';
-        el.addEventListener('mouseenter', function() { el.style.background = '#2a2a4e'; });
-        el.addEventListener('mouseleave', function() { el.style.background = 'none'; });
-        el.addEventListener('click', function() { item.action(); menu.remove(); });
-        menu.appendChild(el);
-      });
-
-      document.body.appendChild(menu);
-      var removeMenu = function() { menu.remove(); document.removeEventListener('click', removeMenu); };
-      setTimeout(function() { document.addEventListener('click', removeMenu); }, 0);
+    // ---- Listen for messages from internal pages (newtab, bookmarks, history) ----
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'nightmare-navigate' && e.data.url) {
+        var tab = getActiveTab();
+        if (tab) navigateTab(tab, resolveUrl(e.data.url));
+      }
     });
 
     // ---- Init ----

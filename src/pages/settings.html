@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Settings - Nightmare Browser</title>
   <link rel="stylesheet" href="../styles/tokens.css">
   <style>
@@ -36,7 +35,7 @@
       border: 1px solid var(--nm-tab-border); border-radius: var(--nm-radius-sm);
       padding: 0 10px; font-family: var(--nm-font-mono);
       font-size: var(--nm-text-base); color: var(--nm-text-primary);
-      outline: none;
+      outline: none; box-sizing: border-box;
     }
     input:focus, select:focus {
       border-color: var(--nm-accent);
@@ -44,13 +43,48 @@
     }
     select { cursor: pointer; }
     select option { background: var(--nm-bg-secondary); }
-    .btn-save {
-      margin-top: 20px; padding: 8px 24px;
-      background: var(--nm-accent); color: #fff; border: none;
+    .btn-row { display: flex; gap: 8px; margin-top: 20px; max-width: 520px; }
+    .btn {
+      padding: 8px 24px; border: none;
       border-radius: var(--nm-radius-sm); font-size: var(--nm-text-base);
       font-family: var(--nm-font-ui); cursor: pointer; font-weight: 500;
     }
+    .btn-save { background: var(--nm-accent); color: #fff; }
     .btn-save:hover { background: #cf2f3c; }
+    .btn-reset {
+      background: none; border: 1px solid var(--nm-tab-border);
+      color: var(--nm-text-secondary);
+    }
+    .btn-reset:hover { border-color: var(--nm-accent); color: var(--nm-accent); }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--nm-accent); color: #fff; padding: 8px 24px;
+      border-radius: var(--nm-radius-sm); font-size: var(--nm-text-sm);
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    .toast.visible { opacity: 1; }
+    .info {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      margin-top: 4px;
+    }
+    .data-section {
+      max-width: 520px; margin-top: 32px; padding-top: 24px;
+      border-top: 1px solid var(--nm-tab-border);
+    }
+    .data-section h2 {
+      font-size: var(--nm-text-sm); color: var(--nm-zone-web-fg);
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+    .data-info {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      font-family: var(--nm-font-mono); margin-bottom: 12px;
+    }
+    .btn-danger {
+      background: #3a0808; border: 1px solid var(--nm-zone-web-fg);
+      color: var(--nm-zone-web-fg);
+    }
+    .btn-danger:hover { background: var(--nm-zone-web-fg); color: #fff; }
   </style>
 </head>
 <body>
@@ -59,7 +93,7 @@
     <h2>General</h2>
     <div class="field">
       <label for="home-url">Home Page URL</label>
-      <input type="text" id="home-url" value="nightmare://newtab" placeholder="nightmare://newtab">
+      <input type="text" id="home-url" value="nightmare://home" placeholder="nightmare://home">
     </div>
     <div class="field">
       <label for="search-engine">Search Engine</label>
@@ -75,7 +109,14 @@
     <div class="field">
       <label for="theme">Theme</label>
       <select id="theme">
-        <option value="dark" selected>Dark</option>
+        <option value="dark" selected>Dark (Nightmare)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="show-bookmarks-bar">Show Bookmarks Bar</label>
+      <select id="show-bookmarks-bar">
+        <option value="true">Always</option>
+        <option value="false">Never</option>
       </select>
     </div>
   </div>
@@ -84,8 +125,127 @@
     <div class="field">
       <label for="api-port">API Port</label>
       <input type="number" id="api-port" value="6660" min="1024" max="65535">
+      <div class="info">Requires browser restart to take effect</div>
+    </div>
+    <div class="field">
+      <label for="user-agent">User Agent Override</label>
+      <input type="text" id="user-agent" placeholder="Leave empty for default">
+      <div class="info">Custom User-Agent string for web requests</div>
     </div>
   </div>
-  <button class="btn-save" id="save-btn">Save Settings</button>
+  <div class="btn-row">
+    <button class="btn btn-save" id="save-btn">Save Settings</button>
+    <button class="btn btn-reset" id="reset-btn">Reset to Defaults</button>
+  </div>
+
+  <div class="data-section">
+    <h2>Data Management</h2>
+    <div class="data-info" id="data-path"></div>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="clear-history-btn">Clear History</button>
+      <button class="btn btn-danger" id="clear-bookmarks-btn">Clear Bookmarks</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Settings saved</div>
+
+  <script>
+    var fs, pathMod, os;
+    try { fs = require('fs'); pathMod = require('path'); os = require('os'); } catch(e) {}
+
+    var DEFAULTS = {
+      homePage: 'nightmare://home',
+      searchEngine: 'google',
+      theme: 'dark',
+      bookmarksBarVisible: true,
+      apiPort: 6660,
+      userAgent: ''
+    };
+
+    function getDataDir() {
+      var dir = pathMod.join(os.homedir(), '.nightmare-browser');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    }
+
+    function loadSettings() {
+      if (!fs) return DEFAULTS;
+      var settingsFile = pathMod.join(getDataDir(), 'settings.json');
+      try {
+        var saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        return Object.assign({}, DEFAULTS, saved);
+      } catch(e) {
+        return Object.assign({}, DEFAULTS);
+      }
+    }
+
+    function saveSettings(settings) {
+      if (!fs) return;
+      var settingsFile = pathMod.join(getDataDir(), 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf8');
+    }
+
+    function showToast(msg) {
+      var toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('visible');
+      setTimeout(function() { toast.classList.remove('visible'); }, 2000);
+    }
+
+    function populateForm(settings) {
+      document.getElementById('home-url').value = settings.homePage;
+      document.getElementById('search-engine').value = settings.searchEngine;
+      document.getElementById('theme').value = settings.theme;
+      document.getElementById('show-bookmarks-bar').value = String(settings.bookmarksBarVisible);
+      document.getElementById('api-port').value = settings.apiPort;
+      document.getElementById('user-agent').value = settings.userAgent || '';
+    }
+
+    function readForm() {
+      return {
+        homePage: document.getElementById('home-url').value || DEFAULTS.homePage,
+        searchEngine: document.getElementById('search-engine').value,
+        theme: document.getElementById('theme').value,
+        bookmarksBarVisible: document.getElementById('show-bookmarks-bar').value === 'true',
+        apiPort: parseInt(document.getElementById('api-port').value, 10) || DEFAULTS.apiPort,
+        userAgent: document.getElementById('user-agent').value
+      };
+    }
+
+    // Init
+    if (fs) {
+      var dataDir = getDataDir();
+      document.getElementById('data-path').textContent = 'Data directory: ' + dataDir;
+    }
+
+    var currentSettings = loadSettings();
+    populateForm(currentSettings);
+
+    document.getElementById('save-btn').addEventListener('click', function() {
+      var settings = readForm();
+      saveSettings(settings);
+      showToast('Settings saved');
+    });
+
+    document.getElementById('reset-btn').addEventListener('click', function() {
+      populateForm(DEFAULTS);
+      saveSettings(DEFAULTS);
+      showToast('Settings reset to defaults');
+    });
+
+    document.getElementById('clear-history-btn').addEventListener('click', function() {
+      if (!fs) return;
+      var histFile = pathMod.join(getDataDir(), 'history.json');
+      try { fs.writeFileSync(histFile, '[]', 'utf8'); } catch(e) {}
+      showToast('History cleared');
+    });
+
+    document.getElementById('clear-bookmarks-btn').addEventListener('click', function() {
+      if (!fs) return;
+      var bmFile = pathMod.join(getDataDir(), 'bookmarks.json');
+      try { fs.writeFileSync(bmFile, '[]', 'utf8'); } catch(e) {}
+      showToast('Bookmarks cleared');
+    });
+  </script>
 </body>
 </html>

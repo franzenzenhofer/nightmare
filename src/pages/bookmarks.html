@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bookmarks - Nightmare Browser</title>
   <link rel="stylesheet" href="../styles/tokens.css">
   <style>
@@ -17,76 +16,221 @@
     }
     .toolbar {
       display: flex; gap: 8px; margin-bottom: 24px;
-      max-width: 680px;
+      max-width: 720px;
     }
-    .toolbar .search-input {
-      flex: 1; height: 32px; background: var(--nm-bg-input);
+    .search-input {
+      flex: 1; height: 36px; background: var(--nm-bg-input);
       border: 1px solid var(--nm-tab-border);
-      border-radius: var(--nm-radius-full); padding: 0 14px;
+      border-radius: var(--nm-radius-full); padding: 0 16px;
       font-family: var(--nm-font-url); font-size: var(--nm-text-base);
       color: var(--nm-text-primary); outline: none;
     }
-    .toolbar .search-input:focus {
+    .search-input:focus {
       border-color: var(--nm-accent);
       box-shadow: 0 0 0 1px var(--nm-accent-dim);
     }
-    .tree { max-width: 680px; }
-    .tree-folder {
-      margin-bottom: 4px;
+    .btn {
+      height: 36px; padding: 0 16px; border: 1px solid var(--nm-tab-border);
+      background: var(--nm-bg-secondary); color: var(--nm-text-secondary);
+      border-radius: var(--nm-radius-sm); cursor: pointer;
+      font-family: var(--nm-font-ui); font-size: var(--nm-text-xs);
+      text-transform: uppercase; letter-spacing: 1px;
     }
-    .tree-folder-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 10px; border-radius: var(--nm-radius-sm);
-      cursor: pointer; font-size: var(--nm-text-sm);
-      color: var(--nm-text-primary); font-weight: 500;
+    .btn:hover { background: var(--nm-accent); color: #fff; border-color: var(--nm-accent); }
+    .bookmarks-list { max-width: 720px; }
+    .bookmark-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; border-radius: var(--nm-radius-sm);
+      cursor: pointer; border-bottom: 1px solid rgba(26,29,46,0.5);
     }
-    .tree-folder-header:hover { background: var(--nm-bg-hover); }
-    .tree-folder-header .folder-icon {
-      color: var(--nm-accent); font-size: 14px;
-    }
-    .tree-children { padding-left: 20px; }
-    .tree-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 5px 10px; border-radius: var(--nm-radius-sm);
-      cursor: pointer; font-size: var(--nm-text-sm);
-      color: var(--nm-text-secondary);
-    }
-    .tree-item:hover {
-      background: var(--nm-bg-hover); color: var(--nm-text-primary);
-    }
-    .tree-item .item-favicon {
-      width: 14px; height: 14px; flex-shrink: 0;
+    .bookmark-item:hover { background: var(--nm-bg-hover); }
+    .bookmark-favicon {
+      width: 16px; height: 16px; flex-shrink: 0;
       background: var(--nm-bg-tertiary); border-radius: 2px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: var(--nm-accent);
     }
-    .tree-item .item-url {
-      font-family: var(--nm-font-mono); font-size: var(--nm-text-xs);
-      color: var(--nm-text-muted); margin-left: auto;
+    .bookmark-info { flex: 1; min-width: 0; }
+    .bookmark-title {
+      font-size: var(--nm-text-sm); color: var(--nm-text-primary);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .bookmark-url {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      font-family: var(--nm-font-mono); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .bookmark-date {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      font-family: var(--nm-font-mono); flex-shrink: 0;
+    }
+    .bookmark-delete {
+      width: 24px; height: 24px; display: flex; align-items: center;
+      justify-content: center; border: none; background: none;
+      color: var(--nm-text-muted); cursor: pointer; border-radius: 4px;
+      font-size: 14px; flex-shrink: 0; opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .bookmark-item:hover .bookmark-delete { opacity: 1; }
+    .bookmark-delete:hover { background: #3a0808; color: var(--nm-zone-web-fg); }
     .empty {
       color: var(--nm-text-muted); font-size: var(--nm-text-sm);
-      padding: 40px 0; text-align: center;
+      padding: 60px 0; text-align: center;
+    }
+    .count {
+      font-size: var(--nm-text-xs); color: var(--nm-text-muted);
+      margin-bottom: 16px;
     }
   </style>
 </head>
 <body>
   <h1>Bookmarks</h1>
   <div class="toolbar">
-    <input class="search-input" type="text" placeholder="Search bookmarks..." autofocus>
+    <input class="search-input" id="search" type="text" placeholder="Search bookmarks..." autofocus>
+    <button class="btn" id="btn-export">Export</button>
   </div>
-  <div class="tree" id="bookmarks-tree">
-    <div class="tree-folder">
-      <div class="tree-folder-header">
-        <span class="folder-icon">&#9660;</span> Bookmarks Bar
-      </div>
-      <div class="tree-children">
-        <div class="empty">No bookmarks yet.</div>
-      </div>
-    </div>
-    <div class="tree-folder">
-      <div class="tree-folder-header">
-        <span class="folder-icon">&#9654;</span> Other Bookmarks
-      </div>
-    </div>
+  <div class="count" id="count"></div>
+  <div class="bookmarks-list" id="bookmarks-list">
+    <div class="empty">Loading...</div>
   </div>
+  <script>
+    var fs, pathMod, os;
+    try { fs = require('fs'); pathMod = require('path'); os = require('os'); } catch(e) {}
+
+    var bookmarksFile = '';
+    var bookmarks = [];
+    var listEl = document.getElementById('bookmarks-list');
+    var searchEl = document.getElementById('search');
+    var countEl = document.getElementById('count');
+
+    function getDataDir() {
+      var dir = pathMod.join(os.homedir(), '.nightmare-browser');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    }
+
+    function loadBookmarks() {
+      if (!fs) return;
+      bookmarksFile = pathMod.join(getDataDir(), 'bookmarks.json');
+      try {
+        bookmarks = JSON.parse(fs.readFileSync(bookmarksFile, 'utf8'));
+      } catch(e) {
+        bookmarks = [];
+      }
+      render();
+    }
+
+    function saveBookmarks() {
+      if (!fs) return;
+      fs.writeFileSync(bookmarksFile, JSON.stringify(bookmarks, null, 2), 'utf8');
+    }
+
+    function clearElement(el) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function createEmptyState(msg) {
+      var el = document.createElement('div');
+      el.className = 'empty';
+      el.textContent = msg;
+      return el;
+    }
+
+    function render(filter) {
+      var filtered = bookmarks;
+      if (filter) {
+        var q = filter.toLowerCase();
+        filtered = bookmarks.filter(function(b) {
+          return (b.title || '').toLowerCase().includes(q) ||
+                 (b.url || '').toLowerCase().includes(q);
+        });
+      }
+      countEl.textContent = filtered.length + ' bookmark' + (filtered.length !== 1 ? 's' : '');
+
+      clearElement(listEl);
+
+      if (filtered.length === 0) {
+        listEl.appendChild(createEmptyState(
+          filter ? 'No matches found.' : 'No bookmarks yet. Press Ctrl+D to bookmark a page.'
+        ));
+        return;
+      }
+
+      filtered.forEach(function(bm) {
+        var item = document.createElement('div');
+        item.className = 'bookmark-item';
+
+        var fav = document.createElement('div');
+        fav.className = 'bookmark-favicon';
+        fav.textContent = (bm.title || '?')[0].toUpperCase();
+        item.appendChild(fav);
+
+        var info = document.createElement('div');
+        info.className = 'bookmark-info';
+
+        var title = document.createElement('div');
+        title.className = 'bookmark-title';
+        title.textContent = bm.title || bm.url;
+        info.appendChild(title);
+
+        var url = document.createElement('div');
+        url.className = 'bookmark-url';
+        url.textContent = bm.url;
+        info.appendChild(url);
+
+        item.appendChild(info);
+
+        var date = document.createElement('span');
+        date.className = 'bookmark-date';
+        date.textContent = bm.createdAt ? new Date(bm.createdAt).toLocaleDateString() : '';
+        item.appendChild(date);
+
+        var del = document.createElement('button');
+        del.className = 'bookmark-delete';
+        del.textContent = '\u2715';
+        del.title = 'Remove bookmark';
+        del.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var realIdx = bookmarks.indexOf(bm);
+          if (realIdx >= 0) {
+            bookmarks.splice(realIdx, 1);
+            saveBookmarks();
+            render(searchEl.value);
+          }
+        });
+        item.appendChild(del);
+
+        item.addEventListener('click', function() {
+          try {
+            window.top.postMessage({ type: 'nightmare-navigate', url: bm.url }, '*');
+          } catch(e) {}
+        });
+
+        listEl.appendChild(item);
+      });
+    }
+
+    searchEl.addEventListener('input', function() { render(this.value); });
+
+    document.getElementById('btn-export').addEventListener('click', function() {
+      if (!fs) return;
+      var lines = [
+        '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
+        '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
+        '<TITLE>Bookmarks</TITLE>',
+        '<H1>Bookmarks</H1>',
+        '<DL><p>'
+      ];
+      bookmarks.forEach(function(b) {
+        var ts = b.createdAt ? Math.floor(new Date(b.createdAt).getTime() / 1000) : '';
+        lines.push('  <DT><A HREF="' + (b.url || '') + '" ADD_DATE="' + ts + '">' + (b.title || b.url) + '</A>');
+      });
+      lines.push('</DL><p>');
+      var exportPath = pathMod.join(os.homedir(), 'Downloads', 'nightmare-bookmarks.html');
+      fs.writeFileSync(exportPath, lines.join('\n'), 'utf8');
+    });
+
+    loadBookmarks();
+  </script>
 </body>
 </html>
