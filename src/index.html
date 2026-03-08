@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nightmare Browser</title>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <style>
+    #browser-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #titlebar {
+      height: var(--nm-tab-height);
+      background: var(--nm-bg-secondary);
+      display: flex;
+      align-items: center;
+      -webkit-app-region: drag;
+      border-bottom: 1px solid var(--nm-border-primary);
+    }
+
+    #tab-bar {
+      height: var(--nm-tab-height);
+      background: var(--nm-bg-tertiary);
+      display: flex;
+      align-items: center;
+      overflow-x: auto;
+      overflow-y: hidden;
+      border-bottom: 1px solid var(--nm-border-primary);
+    }
+
+    #nav-bar {
+      height: var(--nm-nav-height);
+      background: var(--nm-nav-bg);
+      display: flex;
+      align-items: center;
+      padding: 0 var(--nm-spacing-sm);
+      gap: var(--nm-spacing-sm);
+      border-bottom: 1px solid var(--nm-border-primary);
+    }
+
+    #security-banner {
+      height: var(--nm-banner-height);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--nm-font-mono);
+      font-size: var(--nm-font-size-xs);
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+
+    #security-banner.web {
+      display: flex;
+      background: var(--nm-banner-web-bg);
+      color: var(--nm-banner-web-text);
+    }
+
+    #bookmarks-bar {
+      height: var(--nm-bookmarks-height);
+      background: var(--nm-bg-secondary);
+      display: flex;
+      align-items: center;
+      padding: 0 var(--nm-spacing-sm);
+      border-bottom: 1px solid var(--nm-border-primary);
+      overflow: hidden;
+    }
+
+    #content-area {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #webview-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #sidebar {
+      width: var(--nm-sidebar-width);
+      background: var(--nm-bg-secondary);
+      border-left: 1px solid var(--nm-border-primary);
+      display: none;
+      flex-direction: column;
+    }
+
+    #sidebar.open {
+      display: flex;
+    }
+
+    #find-bar {
+      height: var(--nm-findbar-height);
+      background: var(--nm-bg-surface);
+      display: none;
+      align-items: center;
+      padding: 0 var(--nm-spacing-md);
+      border-top: 1px solid var(--nm-border-primary);
+    }
+
+    #find-bar.open {
+      display: flex;
+    }
+
+    #status-bar {
+      height: var(--nm-status-height);
+      background: var(--nm-status-bg);
+      display: flex;
+      align-items: center;
+      padding: 0 var(--nm-spacing-sm);
+      font-family: var(--nm-font-mono);
+      font-size: var(--nm-font-size-xs);
+      color: var(--nm-text-muted);
+      border-top: 1px solid var(--nm-border-primary);
+    }
+  </style>
+</head>
+<body>
+  <div id="browser-shell">
+    <div id="titlebar"></div>
+    <div id="tab-bar"></div>
+    <div id="nav-bar"></div>
+    <div id="security-banner"></div>
+    <div id="bookmarks-bar"></div>
+    <div id="content-area">
+      <div id="webview-container"></div>
+      <div id="sidebar"></div>
+    </div>
+    <div id="find-bar"></div>
+    <div id="status-bar"></div>
+  </div>
+</body>
+</html>
