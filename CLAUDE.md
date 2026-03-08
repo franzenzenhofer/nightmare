@@ -455,6 +455,8 @@ Examples:
 
 **Commit after each RED-GREEN-REFACTOR cycle.** Not after each line. Not after each file. After each complete TDD cycle.
 
+**Push to GitHub after milestones.** After every new feature, new working test suite, or milestone completion: `git push origin main`. The private repo at `https://github.com/franzenzenhofer/nightmare.git` is the backup. Push early, push often. Never let unpushed commits pile up.
+
 ---
 
 ## Scripts (package.json)
