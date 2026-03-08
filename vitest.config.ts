@@ -2,17 +2,23 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts', 'src/**/*.test.js'],
-    exclude: ['src/browser/_unused/**'],
+    include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.ts', 'src/browser/js/**/*.js'],
+      include: ['src/**/*.ts'],
       exclude: [
         'src/**/*.test.ts',
-        'src/**/*.test.js',
         'src/**/index.ts',
-        'src/browser/_unused/**',
+        'src/**/route-defs-*.ts',
+        'src/**/handlers-*.ts',
+        'src/**/tools-extended*.ts',
       ],
+      thresholds: {
+        lines: 95,
+        functions: 95,
+        branches: 95,
+        statements: 95,
+      },
     },
   },
 });
