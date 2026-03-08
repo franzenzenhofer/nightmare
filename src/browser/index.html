@@ -62,8 +62,8 @@
     </div>
   </div>
 
+  <!-- Phase 1: Global state + Node.js requires -->
   <script>
-    // ---- Window object (robust: try modern API first, then legacy) ----
     var win = null;
     try {
       win = nw.Window.get();
@@ -83,68 +83,17 @@
     var os = require('os');
     console.log('[Nightmare] Modules loaded, win:', !!win);
 
-    // ---- State ----
     var tabs = new Map();
     var activeTabId = null;
     var tabCounter = 0;
     var dismissedBanners = new Set();
     var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
-    var navState = new Map(); // tabId -> { depth, forwardDepth, openerId, lastUrl, isBackForward }
+    var navState = new Map();
     var findBarVisible = false;
 
-    // ---- Persistent data directory ----
     var _dataDir = path.join(os.homedir(), '.nightmare-browser');
     if (!fs.existsSync(_dataDir)) fs.mkdirSync(_dataDir, { recursive: true });
 
-    function loadJsonFile(name) {
-      try { return JSON.parse(fs.readFileSync(path.join(_dataDir, name), 'utf8')); }
-      catch(e) { return []; }
-    }
-    function saveJsonFile(name, data) {
-      fs.writeFileSync(path.join(_dataDir, name), JSON.stringify(data, null, 2), 'utf8');
-    }
-
-    // ---- Persistent bookmarks ----
-    var userBookmarks = loadJsonFile('bookmarks.json');
-
-    function isBookmarked(url) {
-      var display = toDisplayUrl(url);
-      return userBookmarks.some(function(b) { return b.url === url || b.url === display; });
-    }
-    function addBookmark(url, title) {
-      if (isBookmarked(url)) return;
-      var display = toDisplayUrl(url);
-      userBookmarks.push({ title: title || display, url: display, createdAt: new Date().toISOString() });
-      saveJsonFile('bookmarks.json', userBookmarks);
-      updateBookmarkButton();
-      renderBookmarks();
-    }
-    function removeBookmark(url) {
-      var display = toDisplayUrl(url);
-      userBookmarks = userBookmarks.filter(function(b) { return b.url !== url && b.url !== display; });
-      saveJsonFile('bookmarks.json', userBookmarks);
-      updateBookmarkButton();
-      renderBookmarks();
-    }
-
-    // ---- Persistent history ----
-    var browsingHistory = loadJsonFile('history.json');
-
-    function recordHistory(url, title) {
-      var display = toDisplayUrl(url);
-      // Skip internal pages and empty URLs
-      if (!url || url === 'about:blank') return;
-      browsingHistory.unshift({ url: display, title: title || display, visitedAt: new Date().toISOString(), displayUrl: display });
-      // Cap at 5000
-      if (browsingHistory.length > 5000) browsingHistory = browsingHistory.slice(0, 5000);
-      saveJsonFile('history.json', browsingHistory);
-    }
-
-    // ---- Settings ----
-    var userSettings = {};
-    try { userSettings = JSON.parse(fs.readFileSync(path.join(_dataDir, 'settings.json'), 'utf8')); } catch(e) {}
-
-    // NW.js inline scripts don't have __dirname — derive paths from process.cwd()
     var _srcDir = process.cwd();
     if (!_srcDir.endsWith('/src') && !_srcDir.endsWith('\\src')) {
       process.argv.forEach(function(a) {
@@ -162,771 +111,26 @@
     console.log('[Nightmare] srcDir:', _srcDir);
     console.log('[Nightmare] samplesDir:', samplesDir);
     console.log('[Nightmare] pagesDir:', pagesDir);
+  </script>
 
-    // ---- Execute JS in a frame context ----
-    // This is intentionally using eval() in the frame's context.
-    // Nightmare Browser's core feature is executing arbitrary JS in any tab via API.
-    // This is the entire point of the browser — AI agents need to run JS in web pages.
-    // eval() is used instead of new Function() because eval returns the last expression value.
-    function executeInFrame(frame, code, cb) {
-      try {
-        var result = frame.contentWindow.eval(code);
-        if (cb) cb(null, result);
-        return result;
-      } catch(e) {
-        if (cb) cb(e, undefined);
-      }
-    }
+  <!-- Phase 2: Pure function modules -->
+  <script src="js/display.js"></script>
+  <script src="js/zones.js"></script>
+  <script src="js/markdown.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/navigation.js"></script>
+  <script src="js/context-menu.js"></script>
+  <script src="js/find.js"></script>
 
-    // ---- Unified server: API + local file serving on single port ----
-    function localFileUrl(filePath) {
-      return 'http://127.0.0.1:' + API_PORT + '/file/' + encodeURIComponent(filePath);
-    }
+  <!-- Phase 3: Runtime — state init, server, tabs, UI, controls -->
+  <script>
+    // ---- Load persistent data (depends on data.js) ----
+    var userBookmarks = loadJsonFile('bookmarks.json');
+    var browsingHistory = loadJsonFile('history.json');
+    var userSettings = {};
+    try { userSettings = JSON.parse(fs.readFileSync(path.join(_dataDir, 'settings.json'), 'utf8')); } catch(e) {}
 
-    function proxyUrl(webUrl) {
-      return 'http://127.0.0.1:' + API_PORT + '/proxy/' + encodeURIComponent(webUrl);
-    }
-
-    function toDisplayUrl(internalUrl) {
-      var filePrefix = 'http://127.0.0.1:' + API_PORT + '/file/';
-      var proxyPrefix = 'http://127.0.0.1:' + API_PORT + '/proxy/';
-      // Proxy URL: show the original external URL
-      if (internalUrl.startsWith(proxyPrefix)) {
-        return decodeURIComponent(internalUrl.slice(proxyPrefix.length));
-      }
-      // File URL: show nightmare:// scheme
-      if (internalUrl.startsWith(filePrefix)) {
-        var filePath = decodeURIComponent(internalUrl.slice(filePrefix.length));
-        if (filePath.startsWith(samplesDir)) {
-          var name = path.basename(filePath, '.html');
-          return 'nightmare://' + (name === 'hello' ? 'home' : name);
-        }
-        if (filePath.startsWith(pagesDir)) {
-          return 'nightmare://' + path.basename(filePath, '.html');
-        }
-        return 'nightmare://' + filePath;
-      }
-      return internalUrl;
-    }
-
-    function tabToJson(t) {
-      return { id: t.id, url: t.url, displayUrl: toDisplayUrl(t.url), title: t.title, zone: t.zone };
-    }
-
-    function serveMimeType(ext) {
-      var m = {
-        '.html': 'text/html', '.htm': 'text/html',
-        '.css': 'text/css', '.js': 'application/javascript',
-        '.json': 'application/json', '.png': 'image/png',
-        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif', '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon', '.woff': 'font/woff',
-        '.woff2': 'font/woff2', '.ttf': 'font/ttf',
-        '.mp3': 'audio/mpeg', '.mp4': 'video/mp4',
-        '.wasm': 'application/wasm', '.xml': 'application/xml',
-        '.txt': 'text/plain', '.md': 'text/plain',
-        '.ts': 'text/plain', '.tsx': 'text/plain'
-      };
-      return m[ext] || 'application/octet-stream';
-    }
-
-    // ---- Minimal Markdown to HTML renderer ----
-    function renderMarkdown(md) {
-      var lines = md.split('\n');
-      var html = [];
-      var inCode = false;
-      var inList = false;
-      var listType = '';
-
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-
-        // Fenced code blocks
-        if (line.trim().startsWith('```')) {
-          if (inCode) { html.push('</code></pre>'); inCode = false; }
-          else { html.push('<pre><code>'); inCode = true; }
-          continue;
-        }
-        if (inCode) { html.push(escapeHtml(line) + '\n'); continue; }
-
-        // Close list if non-list line
-        if (inList && !line.match(/^\s*[-*+]\s/) && !line.match(/^\s*\d+\.\s/) && line.trim() !== '') {
-          html.push(listType === 'ul' ? '</ul>' : '</ol>');
-          inList = false;
-        }
-
-        // Headings
-        var hMatch = line.match(/^(#{1,6})\s+(.*)$/);
-        if (hMatch) { var lv = hMatch[1].length; html.push('<h' + lv + '>' + inlineFormat(hMatch[2]) + '</h' + lv + '>'); continue; }
-
-        // HR
-        if (/^(-{3,}|_{3,}|\*{3,})\s*$/.test(line.trim())) { html.push('<hr>'); continue; }
-
-        // Blockquote
-        if (line.startsWith('> ')) { html.push('<blockquote>' + inlineFormat(line.slice(2)) + '</blockquote>'); continue; }
-
-        // Unordered list
-        var ulMatch = line.match(/^\s*[-*+]\s+(.*)$/);
-        if (ulMatch) {
-          if (!inList || listType !== 'ul') { if (inList) html.push('</ol>'); html.push('<ul>'); inList = true; listType = 'ul'; }
-          html.push('<li>' + inlineFormat(ulMatch[1]) + '</li>');
-          continue;
-        }
-
-        // Ordered list
-        var olMatch = line.match(/^\s*\d+\.\s+(.*)$/);
-        if (olMatch) {
-          if (!inList || listType !== 'ol') { if (inList) html.push('</ul>'); html.push('<ol>'); inList = true; listType = 'ol'; }
-          html.push('<li>' + inlineFormat(olMatch[1]) + '</li>');
-          continue;
-        }
-
-        // Empty line = paragraph break
-        if (line.trim() === '') { html.push('<br>'); continue; }
-
-        // Regular paragraph
-        html.push('<p>' + inlineFormat(line) + '</p>');
-      }
-
-      if (inCode) html.push('</code></pre>');
-      if (inList) html.push(listType === 'ul' ? '</ul>' : '</ol>');
-      return html.join('\n');
-    }
-
-    function escapeHtml(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    function inlineFormat(s) {
-      s = escapeHtml(s);
-      // Images
-      s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
-      // Links
-      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-      // Bold
-      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-      // Italic
-      s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
-      // Inline code
-      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-      // Strikethrough
-      s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
-      return s;
-    }
-
-    var server = http.createServer(function(req, res) {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, PUT, PATCH, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-      if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-
-      var url = req.url || '/';
-
-      // ---- Static assets: /styles/*, /assets/*, /pages/* resolve relative to _srcDir ----
-      if (url.startsWith('/styles/') || url.startsWith('/assets/') || url.startsWith('/pages/')) {
-        var staticPath = path.join(_srcDir, url);
-        try {
-          var staticContent = fs.readFileSync(staticPath);
-          var staticExt = path.extname(staticPath).toLowerCase();
-          res.writeHead(200, { 'Content-Type': serveMimeType(staticExt) });
-          res.end(staticContent);
-        } catch(e) {
-          res.writeHead(404, { 'Content-Type': 'text/plain' });
-          res.end('Not found: ' + url);
-        }
-        return;
-      }
-
-      // ---- Local file serving: /file/<encoded-path> ----
-      if (url.startsWith('/file/')) {
-        var filePath = decodeURIComponent(url.substring(6));
-        try {
-          var resolved = path.resolve(filePath);
-          var content = fs.readFileSync(resolved);
-          var ext = path.extname(resolved).toLowerCase();
-
-          // Render .md files as styled HTML
-          if (ext === '.md') {
-            var mdText = content.toString('utf-8');
-            var htmlBody = renderMarkdown(mdText);
-            var fileName = path.basename(resolved);
-            var mdHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + fileName + '</title>' +
-              '<style>' +
-              'body{background:#0a0a14;color:#c8c8d8;font-family:"Cascadia Code","JetBrains Mono","Fira Code",monospace;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.7;}' +
-              'h1,h2,h3,h4,h5,h6{color:#ff4444;border-bottom:1px solid #1a1a2e;padding-bottom:8px;margin-top:32px;}' +
-              'h1{font-size:1.8em;}h2{font-size:1.4em;}h3{font-size:1.2em;}' +
-              'a{color:#60a5fa;text-decoration:none;}a:hover{text-decoration:underline;}' +
-              'code{background:#1a1a2e;color:#4ade80;padding:2px 6px;border-radius:3px;font-size:0.9em;}' +
-              'pre{background:#1a1a2e;padding:16px;border-radius:6px;overflow-x:auto;border:1px solid #333;}' +
-              'pre code{background:none;padding:0;}' +
-              'blockquote{border-left:3px solid #ff4444;margin-left:0;padding-left:16px;color:#888;}' +
-              'img{max-width:100%;border-radius:6px;}' +
-              'table{border-collapse:collapse;width:100%;}th,td{border:1px solid #333;padding:8px 12px;text-align:left;}th{background:#1a1a2e;}' +
-              'hr{border:none;border-top:1px solid #333;margin:24px 0;}' +
-              'ul,ol{padding-left:24px;}li{margin:4px 0;}' +
-              '.nm-md-meta{color:#585a64;font-size:0.85em;border-bottom:1px solid #1a1a2e;padding-bottom:12px;margin-bottom:24px;}' +
-              '</style></head><body>' +
-              '<div class="nm-md-meta">nightmare://' + fileName + ' ─ ' + resolved + '</div>' +
-              htmlBody + '</body></html>';
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(mdHtml);
-            return;
-          }
-
-          res.writeHead(200, { 'Content-Type': serveMimeType(ext) });
-          res.end(content);
-        } catch(e) {
-          res.writeHead(404, { 'Content-Type': 'text/plain' });
-          res.end('File not found: ' + filePath);
-        }
-        return;
-      }
-
-      // ---- Reverse proxy: /proxy/<encoded-url> — strips X-Frame-Options, injects <base> for relative URLs ----
-      if (url.startsWith('/proxy/')) {
-        var targetUrl = decodeURIComponent(url.substring(7));
-        var proto = targetUrl.startsWith('https') ? https : http;
-        proto.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Nightmare/1.0' } }, function(proxyRes) {
-          var chunks = [];
-          proxyRes.on('data', function(c) { chunks.push(c); });
-          proxyRes.on('end', function() {
-            var body = Buffer.concat(chunks);
-            // Forward headers but strip X-Frame-Options and CSP
-            var headers = {};
-            Object.keys(proxyRes.headers).forEach(function(h) {
-              var lower = h.toLowerCase();
-              if (lower !== 'x-frame-options' && lower !== 'content-security-policy' && lower !== 'content-security-policy-report-only') {
-                headers[h] = proxyRes.headers[h];
-              }
-            });
-            // Inject <base> tag so relative URLs resolve correctly
-            var ct = (headers['content-type'] || '').toLowerCase();
-            if (ct.includes('text/html')) {
-              var html = body.toString('utf-8');
-              var baseUrl = targetUrl.replace(/[?#].*/, '');
-              var baseTag = '<base href="' + baseUrl + '">';
-              if (html.includes('<head>')) {
-                html = html.replace('<head>', '<head>' + baseTag);
-              } else if (html.includes('<HEAD>')) {
-                html = html.replace('<HEAD>', '<HEAD>' + baseTag);
-              } else {
-                html = baseTag + html;
-              }
-              body = Buffer.from(html, 'utf-8');
-              // Update content-length
-              headers['content-length'] = String(body.length);
-            }
-            res.writeHead(proxyRes.statusCode || 200, headers);
-            res.end(body);
-          });
-        }).on('error', function(e) {
-          res.writeHead(502, { 'Content-Type': 'text/plain' });
-          res.end('Proxy error: ' + e.message);
-        });
-        return;
-      }
-
-      // ---- API endpoints ----
-      res.setHeader('Content-Type', 'application/json');
-
-      if (url === '/api/state' && req.method === 'GET') {
-        var tabList = [];
-        tabs.forEach(function(t) { tabList.push(tabToJson(t)); });
-        res.writeHead(200);
-        res.end(JSON.stringify({
-          tabs: tabList,
-          activeTabId: activeTabId,
-          tabCount: tabs.size,
-          nodeVersion: process.version,
-          apiPort: API_PORT,
-          platform: process.platform,
-          arch: process.arch,
-          pid: process.pid,
-          uptime: process.uptime()
-        }));
-        return;
-      }
-
-      if (url === '/api/tabs' && req.method === 'GET') {
-        var list = [];
-        tabs.forEach(function(t) { list.push(tabToJson(t)); });
-        res.writeHead(200);
-        res.end(JSON.stringify(list));
-        return;
-      }
-
-      if (url === '/api/tabs' && req.method === 'POST') {
-        var body = '';
-        req.on('data', function(c) { body += c; });
-        req.on('end', function() {
-          var parsed = {};
-          try { parsed = JSON.parse(body); } catch(e) {}
-          var tab = createTab(parsed.url);
-          res.writeHead(201);
-          res.end(JSON.stringify(tabToJson(tab)));
-        });
-        return;
-      }
-
-      // Tab-specific endpoints
-      var tabIdMatch = url.match(/^\/api\/tabs\/([^/]+)$/);
-      if (tabIdMatch && req.method === 'GET') {
-        var t = tabs.get(tabIdMatch[1]);
-        if (!t) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        res.writeHead(200);
-        res.end(JSON.stringify(tabToJson(t)));
-        return;
-      }
-
-      if (tabIdMatch && req.method === 'DELETE') {
-        closeTab(tabIdMatch[1]);
-        res.writeHead(204);
-        res.end();
-        return;
-      }
-
-      var navMatch = url.match(/^\/api\/tabs\/([^/]+)\/navigate$/);
-      if (navMatch && req.method === 'POST') {
-        var nbody = '';
-        req.on('data', function(c) { nbody += c; });
-        req.on('end', function() {
-          var parsed2 = {};
-          try { parsed2 = JSON.parse(nbody); } catch(e) {}
-          var tab2 = tabs.get(navMatch[1]);
-          if (!tab2) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          navigateTab(tab2, resolveUrl(parsed2.url));
-          res.writeHead(200);
-          res.end(JSON.stringify(tabToJson(tab2)));
-        });
-        return;
-      }
-
-      var reloadMatch = url.match(/^\/api\/tabs\/([^/]+)\/reload$/);
-      if (reloadMatch && req.method === 'POST') {
-        var rt = tabs.get(reloadMatch[1]);
-        if (!rt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        rt.frame.src = rt.url;
-        res.writeHead(200);
-        res.end(JSON.stringify(tabToJson(rt)));
-        return;
-      }
-
-      var activateMatch = url.match(/^\/api\/tabs\/([^/]+)\/activate$/);
-      if (activateMatch && req.method === 'POST') {
-        var at = tabs.get(activateMatch[1]);
-        if (!at) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        activateTab(activateMatch[1]);
-        res.writeHead(200);
-        res.end(JSON.stringify(tabToJson(at)));
-        return;
-      }
-
-      var htmlMatch = url.match(/^\/api\/tabs\/([^/]+)\/html$/);
-      if (htmlMatch && req.method === 'GET') {
-        var ht = tabs.get(htmlMatch[1]);
-        if (!ht) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        executeInFrame(ht.frame, 'document.documentElement.outerHTML', function(err, htmlContent) {
-          res.writeHead(200);
-          if (err) { res.end(JSON.stringify({ tabId: ht.id, html: null, error: 'Cross-origin: cannot read HTML' })); }
-          else { res.end(JSON.stringify({ tabId: ht.id, html: htmlContent })); }
-        });
-        return;
-      }
-
-      var execMatch = url.match(/^\/api\/tabs\/([^/]+)\/execute$/);
-      if (execMatch && req.method === 'POST') {
-        var ebody = '';
-        req.on('data', function(c) { ebody += c; });
-        req.on('end', function() {
-          var eparsed = {};
-          try { eparsed = JSON.parse(ebody); } catch(e) {}
-          var et = tabs.get(execMatch[1]);
-          if (!et) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          executeInFrame(et.frame, eparsed.code, function(err, result) {
-            res.writeHead(200);
-            if (err) { res.end(JSON.stringify({ tabId: et.id, error: err.message })); }
-            else { res.end(JSON.stringify({ tabId: et.id, result: String(result) })); }
-          });
-        });
-        return;
-      }
-
-      // ---- Screenshot: full browser window ----
-      var screenshotMatch = url.match(/^\/api\/screenshot(\?.*)?$/);
-      if (screenshotMatch && req.method === 'GET') {
-        if (!win) { res.writeHead(500); res.end(JSON.stringify({error:'No window handle'})); return; }
-        var params = new URLSearchParams(url.split('?')[1] || '');
-        var sWidth = parseInt(params.get('width') || '0', 10);
-        var sHeight = parseInt(params.get('height') || '0', 10);
-        var sFormat = params.get('format') === 'jpeg' ? 'jpeg' : 'png';
-
-        var doCapture = function() {
-          win.capturePage(function(buffer) {
-            var base64 = buffer.toString('base64');
-            res.writeHead(200);
-            res.end(JSON.stringify({ format: sFormat, width: sWidth || null, height: sHeight || null, data: base64 }));
-          }, { format: sFormat, datatype: 'buffer' });
-        };
-
-        if (sWidth > 0 && sHeight > 0) {
-          var origW = win.width; var origH = win.height;
-          win.resizeTo(sWidth, sHeight);
-          setTimeout(function() {
-            doCapture();
-            win.resizeTo(origW, origH);
-          }, 300);
-        } else {
-          doCapture();
-        }
-        return;
-      }
-
-      // ---- Per-tab screenshot ----
-      var tabScreenshotMatch = url.match(/^\/api\/tabs\/([^/]+)\/screenshot$/);
-      if (tabScreenshotMatch && req.method === 'GET') {
-        var sst = tabs.get(tabScreenshotMatch[1]);
-        if (!sst) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        try {
-          var canvas = document.createElement('canvas');
-          var frameDoc = sst.frame.contentDocument;
-          var frameWin = sst.frame.contentWindow;
-          var w = frameDoc.documentElement.scrollWidth;
-          var h = frameDoc.documentElement.scrollHeight;
-          canvas.width = w; canvas.height = h;
-          // Use html2canvas-style approach via frame capture
-          // NW.js doesn't support per-frame capture directly, use executeInFrame
-          res.writeHead(200);
-          res.end(JSON.stringify({ tabId: sst.id, width: w, height: h, note: 'Use GET /api/screenshot for full window capture. Per-tab capture requires activating the tab first.' }));
-        } catch(e) {
-          res.writeHead(200);
-          res.end(JSON.stringify({ tabId: sst.id, error: 'Cross-origin or capture error: ' + e.message }));
-        }
-        return;
-      }
-
-      // ---- Resize browser window ----
-      var resizeMatch = url.match(/^\/api\/resize(\?.*)?$/);
-      if (resizeMatch && req.method === 'POST') {
-        if (!win) { res.writeHead(500); res.end(JSON.stringify({error:'No window handle'})); return; }
-        var rbody = '';
-        req.on('data', function(c) { rbody += c; });
-        req.on('end', function() {
-          var rparsed = {};
-          try { rparsed = JSON.parse(rbody); } catch(e) {}
-          var rw = rparsed.width || 1280;
-          var rh = rparsed.height || 800;
-          win.resizeTo(rw, rh);
-          res.writeHead(200);
-          res.end(JSON.stringify({ width: rw, height: rh }));
-        });
-        return;
-      }
-
-      // ---- Click element by selector ----
-      var clickMatch = url.match(/^\/api\/tabs\/([^/]+)\/click$/);
-      if (clickMatch && req.method === 'POST') {
-        var cbody = '';
-        req.on('data', function(c) { cbody += c; });
-        req.on('end', function() {
-          var cparsed = {};
-          try { cparsed = JSON.parse(cbody); } catch(e) {}
-          var ct = tabs.get(clickMatch[1]);
-          if (!ct) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          var clickCode = 'var el = document.querySelector(' + JSON.stringify(cparsed.selector) + '); if (el) { el.click(); "clicked" } else { "not_found" }';
-          executeInFrame(ct.frame, clickCode, function(err, clickResult) {
-            res.writeHead(200);
-            if (err) { res.end(JSON.stringify({ tabId: ct.id, error: err.message })); }
-            else { res.end(JSON.stringify({ tabId: ct.id, selector: cparsed.selector, result: clickResult })); }
-          });
-        });
-        return;
-      }
-
-      // ---- Type text into element ----
-      var typeMatch = url.match(/^\/api\/tabs\/([^/]+)\/type$/);
-      if (typeMatch && req.method === 'POST') {
-        var tbody = '';
-        req.on('data', function(c) { tbody += c; });
-        req.on('end', function() {
-          var tparsed = {};
-          try { tparsed = JSON.parse(tbody); } catch(e) {}
-          var tt = tabs.get(typeMatch[1]);
-          if (!tt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          var typeCode = 'var el = document.querySelector(' + JSON.stringify(tparsed.selector) + '); if (el) { el.focus();' +
-            (tparsed.clear ? ' el.value = "";' : '') +
-            ' el.value += ' + JSON.stringify(tparsed.text || '') + ';' +
-            ' el.dispatchEvent(new Event("input", {bubbles:true}));' +
-            ' el.dispatchEvent(new Event("change", {bubbles:true}));' +
-            ' "typed" } else { "not_found" }';
-          executeInFrame(tt.frame, typeCode, function(err, typeResult) {
-            res.writeHead(200);
-            if (err) { res.end(JSON.stringify({ tabId: tt.id, error: err.message })); }
-            else { res.end(JSON.stringify({ tabId: tt.id, selector: tparsed.selector, result: typeResult })); }
-          });
-        });
-        return;
-      }
-
-      // ---- Find elements by selector (querySelector/querySelectorAll) ----
-      var findMatch = url.match(/^\/api\/tabs\/([^/]+)\/find$/);
-      if (findMatch && req.method === 'POST') {
-        var fbody = '';
-        req.on('data', function(c) { fbody += c; });
-        req.on('end', function() {
-          var fparsed = {};
-          try { fparsed = JSON.parse(fbody); } catch(e) {}
-          var ft = tabs.get(findMatch[1]);
-          if (!ft) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          var findCode = '(function() { var els = document.querySelectorAll(' + JSON.stringify(fparsed.selector) + ');' +
-            ' return JSON.stringify(Array.from(els).slice(0, ' + (fparsed.limit || 50) + ').map(function(el) {' +
-            '   var rect = el.getBoundingClientRect();' +
-            '   var attrs = {};' +
-            '   for (var i = 0; i < el.attributes.length; i++) { attrs[el.attributes[i].name] = el.attributes[i].value; }' +
-            '   return { tag: el.tagName, text: (el.textContent || "").substring(0, 200), id: el.id, className: el.className,' +
-            '     href: el.href || null, src: el.src || null, value: el.value || null,' +
-            '     visible: rect.width > 0 && rect.height > 0,' +
-            '     rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height }, attrs: attrs };' +
-            ' })); })()';
-          executeInFrame(ft.frame, findCode, function(err, findResult) {
-            res.writeHead(200);
-            if (err) { res.end(JSON.stringify({ tabId: ft.id, error: err.message })); }
-            else {
-              try { res.end(JSON.stringify({ tabId: ft.id, selector: fparsed.selector, elements: JSON.parse(findResult) })); }
-              catch(pe) { res.end(JSON.stringify({ tabId: ft.id, selector: fparsed.selector, elements: [], error: 'Parse error' })); }
-            }
-          });
-        });
-        return;
-      }
-
-      // ---- Scroll in tab ----
-      var scrollMatch = url.match(/^\/api\/tabs\/([^/]+)\/scroll$/);
-      if (scrollMatch && req.method === 'POST') {
-        var sbody = '';
-        req.on('data', function(c) { sbody += c; });
-        req.on('end', function() {
-          var sparsed = {};
-          try { sparsed = JSON.parse(sbody); } catch(e) {}
-          var st = tabs.get(scrollMatch[1]);
-          if (!st) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-          var scrollCode;
-          if (sparsed.selector) {
-            scrollCode = 'var el = document.querySelector(' + JSON.stringify(sparsed.selector) + '); if (el) { el.scrollIntoView({behavior:"smooth",block:"center"}); "scrolled" } else { "not_found" }';
-          } else {
-            scrollCode = 'window.scrollTo(' + (sparsed.x || 0) + ',' + (sparsed.y || 0) + '); "scrolled"';
-          }
-          executeInFrame(st.frame, scrollCode, function(err, scrollResult) {
-            res.writeHead(200);
-            if (err) { res.end(JSON.stringify({ tabId: st.id, error: err.message })); }
-            else { res.end(JSON.stringify({ tabId: st.id, result: scrollResult })); }
-          });
-        });
-        return;
-      }
-
-      // ---- Get page text content ----
-      var textMatch = url.match(/^\/api\/tabs\/([^/]+)\/text$/);
-      if (textMatch && req.method === 'GET') {
-        var txtt = tabs.get(textMatch[1]);
-        if (!txtt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        var textCode = 'document.body ? document.body.innerText : ""';
-        executeInFrame(txtt.frame, textCode, function(err, textResult) {
-          res.writeHead(200);
-          if (err) { res.end(JSON.stringify({ tabId: txtt.id, error: err.message })); }
-          else { res.end(JSON.stringify({ tabId: txtt.id, text: textResult })); }
-        });
-        return;
-      }
-
-      // ---- Bookmarks API ----
-      if (url === '/api/bookmarks' && req.method === 'GET') {
-        res.writeHead(200);
-        res.end(JSON.stringify(userBookmarks));
-        return;
-      }
-      if (url === '/api/bookmarks' && req.method === 'POST') {
-        var bbody = '';
-        req.on('data', function(c) { bbody += c; });
-        req.on('end', function() {
-          var bparsed = {};
-          try { bparsed = JSON.parse(bbody); } catch(e) {}
-          addBookmark(bparsed.url, bparsed.title);
-          res.writeHead(201);
-          res.end(JSON.stringify({ added: true }));
-        });
-        return;
-      }
-
-      // ---- History API ----
-      if (url === '/api/history' && req.method === 'GET') {
-        res.writeHead(200);
-        res.end(JSON.stringify(browsingHistory.slice(0, 100)));
-        return;
-      }
-
-      // ---- Back/Forward/Reload via API ----
-      var backMatch = url.match(/^\/api\/tabs\/([^/]+)\/back$/);
-      if (backMatch && req.method === 'POST') {
-        var bt = tabs.get(backMatch[1]);
-        if (!bt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        var bstate = navState.get(bt.id);
-        if (bstate && bstate.depth > 0) {
-          bstate.isBackForward = true; bstate.depth--; bstate.forwardDepth++;
-          try { bt.frame.contentWindow.history.back(); } catch(e) {}
-        }
-        res.writeHead(200);
-        res.end(JSON.stringify(tabToJson(bt)));
-        return;
-      }
-
-      var fwdMatch = url.match(/^\/api\/tabs\/([^/]+)\/forward$/);
-      if (fwdMatch && req.method === 'POST') {
-        var fwdt = tabs.get(fwdMatch[1]);
-        if (!fwdt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
-        var fstate = navState.get(fwdt.id);
-        if (fstate && fstate.forwardDepth > 0) {
-          fstate.isBackForward = true; fstate.depth++; fstate.forwardDepth--;
-          try { fwdt.frame.contentWindow.history.forward(); } catch(e) {}
-        }
-        res.writeHead(200);
-        res.end(JSON.stringify(tabToJson(fwdt)));
-        return;
-      }
-
-      if (url === '/api/shutdown' && req.method === 'POST') {
-        res.writeHead(200);
-        res.end(JSON.stringify({ status: 'shutting down' }));
-        setTimeout(function() { if (win) win.close(); }, 100);
-        return;
-      }
-
-      res.writeHead(404);
-      res.end(JSON.stringify({ error: 'Not found', available: [
-        'GET /api/state', 'GET /api/tabs', 'POST /api/tabs',
-        'GET /api/tabs/:id', 'DELETE /api/tabs/:id',
-        'POST /api/tabs/:id/navigate', 'POST /api/tabs/:id/reload',
-        'POST /api/tabs/:id/activate', 'GET /api/tabs/:id/html',
-        'POST /api/tabs/:id/execute', 'GET /api/tabs/:id/text',
-        'GET /api/tabs/:id/screenshot',
-        'POST /api/tabs/:id/click', 'POST /api/tabs/:id/type',
-        'POST /api/tabs/:id/find', 'POST /api/tabs/:id/scroll',
-        'POST /api/tabs/:id/back', 'POST /api/tabs/:id/forward',
-        'GET /api/screenshot', 'POST /api/resize',
-        'GET /api/bookmarks', 'POST /api/bookmarks',
-        'GET /api/history',
-        'POST /api/shutdown'
-      ]}));
-    });
-
-    // ---- Server startup with EADDRINUSE fallback ----
-    var isBrowserInit = false;
-    function safeInitBrowser() {
-      if (isBrowserInit) return;
-      isBrowserInit = true;
-      initBrowser();
-    }
-
-    server.on('error', function(err) {
-      console.error('[Nightmare] Server error:', err.message);
-      if (err.code === 'EADDRINUSE' && API_PORT !== 0) {
-        console.warn('[Nightmare] Port ' + API_PORT + ' in use, trying dynamic port...');
-        API_PORT = 0;
-        server.listen(0, '127.0.0.1', function() {
-          API_PORT = server.address().port;
-          console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT + ' (fallback)');
-          safeInitBrowser();
-        });
-      } else {
-        safeInitBrowser();
-      }
-    });
-
-    server.listen(API_PORT, '127.0.0.1', function() {
-      API_PORT = server.address().port;
-      console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT);
-      safeInitBrowser();
-    });
-
-    // ---- Graceful shutdown ----
-    if (win) {
-      win.on('close', function() {
-        try { server.close(); } catch(e) {}
-        win.close(true);
-      });
-    }
-
-    // ---- Zone classification ----
-    function classifyZone(url) {
-      // Proxy URLs are WEB zone
-      var proxyPrefix = 'http://127.0.0.1:' + API_PORT + '/proxy/';
-      if (url.startsWith(proxyPrefix)) return 'WEB';
-      try {
-        var parsed = new URL(url);
-        if (parsed.protocol === 'file:') return 'LOCAL';
-        if (parsed.protocol === 'nightmare:') return 'LOCAL';
-        var h = parsed.hostname;
-        if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0'
-            || h.endsWith('.localhost')
-            || /^192\.168\.\d+\.\d+$/.test(h)
-            || /^10\.\d+\.\d+\.\d+$/.test(h)
-            || /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(h)) return 'LOCALHOST';
-        return 'WEB';
-      } catch (e) { return 'LOCAL'; }
-    }
-
-    var ZONE_COLORS = { LOCAL: '#4ade80', LOCALHOST: '#60a5fa', WEB: '#ff3333' };
-    var ZONE_CSS = { LOCAL: 'local', LOCALHOST: 'localhost', WEB: 'web' };
-    var ZONE_MSG = {
-      LOCAL: 'LOCAL FILE  //  Node.js active  //  Full system access',
-      LOCALHOST: 'LOCALHOST  //  Node.js active  //  Full system access',
-      WEB: 'THIS WEBSITE HAS FULL NODE.JS ACCESS  //  require() fs process child_process  //  NO SANDBOX'
-    };
-
-    // ---- URL resolution ----
-    function resolveUrl(input) {
-      if (!input) return resolveUrl(HOME_URL);
-      if (input.startsWith('nightmare:///')) {
-        var absPath = input.slice('nightmare://'.length);
-        return localFileUrl(absPath);
-      }
-      if (input.startsWith('nightmare://')) {
-        var pageName = input.replace('nightmare://', '');
-        if (pageName === 'home') return localFileUrl(path.join(samplesDir, 'hello.html'));
-        if (pageName === 'about') return localFileUrl(path.join(pagesDir, 'about.html'));
-        var samplePath = path.join(samplesDir, pageName + '.html');
-        if (fs.existsSync(samplePath)) return localFileUrl(samplePath);
-        var pagePath = path.join(pagesDir, pageName + '.html');
-        if (fs.existsSync(pagePath)) return localFileUrl(pagePath);
-        return localFileUrl(path.join(pagesDir, 'newtab.html'));
-      }
-      if (input.startsWith('file://')) return input;
-      // External web URLs: proxy through local server to strip X-Frame-Options
-      if (/^https?:\/\//.test(input)) {
-        var parsedHost = '';
-        try { parsedHost = new URL(input).hostname; } catch(e) {}
-        // Don't proxy localhost/local — only external WEB zone
-        if (parsedHost === 'localhost' || parsedHost === '127.0.0.1' || parsedHost === '[::1]' || parsedHost === '0.0.0.0'
-            || parsedHost.endsWith('.localhost')
-            || /^192\.168\.\d+\.\d+$/.test(parsedHost)
-            || /^10\.\d+\.\d+\.\d+$/.test(parsedHost)
-            || /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(parsedHost)) {
-          return input;
-        }
-        return proxyUrl(input);
-      }
-      if (/^\d{2,5}$/.test(input)) return 'http://localhost:' + input;
-      // File paths MUST be checked BEFORE the dot-in-domain heuristic
-      if (input.startsWith('/') || input.startsWith('./') || input.startsWith('~')) {
-        return localFileUrl(path.resolve(input.replace(/^~/, os.homedir())));
-      }
-      if (input.includes('.') && !input.includes(' ') && !input.includes('/')) return proxyUrl('https://' + input);
-      return proxyUrl('https://www.google.com/search?q=' + encodeURIComponent(input));
-    }
-
-    // ---- Bookmarks ----
+    // ---- Bookmarks bar ----
     var DEFAULT_BOOKMARKS = [
       { title: 'Home', url: 'nightmare://home' },
       { title: 'Dreamwalker', url: 'nightmare://dreamwalker' },
@@ -946,8 +150,6 @@
       tab.url = newUrl;
       tab.zone = newZone;
 
-      // All zones use iframe + nwfaketop (full Node.js). Recreate only on zone change
-      // because nwfaketop is read-once at iframe creation.
       if (oldZone !== newZone) {
         var wasActive = tab.frame.classList.contains('active');
         var parent = tab.frame.parentNode;
@@ -962,7 +164,6 @@
         parent.appendChild(newFrame);
         tab.frame = newFrame;
 
-        // Reset navigation depth on zone change (iframe recreated, history lost)
         var zoneNavState = navState.get(tab.id);
         if (zoneNavState) { zoneNavState.depth = 0; zoneNavState.forwardDepth = 0; }
 
@@ -989,110 +190,14 @@
           e.preventDefault();
           showContextMenu(e.clientX, e.clientY, [
             { label: 'Open in New Tab', action: function() { createTab(bm.url); } },
-            { label: 'Remove', action: function() {
-              removeBookmark(bm.url);
-            }}
+            { label: 'Remove', action: function() { removeBookmark(bm.url); } }
           ]);
         });
         bar.appendChild(el);
       });
     }
 
-    // ---- Inject right-click context menu into iframe ----
-    function injectContextMenu(tab, frame) {
-      try {
-        var doc = frame.contentDocument;
-        if (!doc) return;
-        doc.addEventListener('contextmenu', function(e) {
-          e.preventDefault();
-          // Collect info about what was right-clicked
-          var target = e.target;
-          var linkEl = target.closest ? target.closest('a[href]') : null;
-          var imgEl = target.closest ? target.closest('img[src]') : null;
-          var selectedText = '';
-          try { selectedText = frame.contentWindow.getSelection().toString(); } catch(err) {}
-
-          // Calculate position relative to the browser window
-          var frameRect = frame.getBoundingClientRect();
-          var mx = e.clientX + frameRect.left;
-          var my = e.clientY + frameRect.top;
-
-          var navSt = navState.get(tab.id);
-          var canBack = navSt && (navSt.depth > 0 || (navSt.openerId && tabs.has(navSt.openerId)));
-          var canFwd = navSt && navSt.forwardDepth > 0;
-          var displayUrl = toDisplayUrl(tab.url);
-
-          var menuItems = [
-            { label: 'Back', shortcut: '\u2318\u2190', disabled: !canBack, action: function() { document.getElementById('nm-btn-back').click(); } },
-            { label: 'Forward', shortcut: '\u2318\u2192', disabled: !canFwd, action: function() { document.getElementById('nm-btn-forward').click(); } },
-            { label: 'Reload', shortcut: '\u2318R', action: function() { tab.frame.src = tab.url; } },
-            { separator: true },
-          ];
-
-          // Link context items
-          if (linkEl) {
-            var linkHref = linkEl.href;
-            menuItems.push({ label: 'Open Link in New Tab', action: function() { createTab(linkHref); } });
-            menuItems.push({ label: 'Copy Link Address', action: function() {
-              try { var cb = require('nw.gui').Clipboard.get(); cb.set(linkHref, 'text'); }
-              catch(err) { try { navigator.clipboard.writeText(linkHref); } catch(e2) {} }
-            }});
-            menuItems.push({ separator: true });
-          }
-
-          // Image context items
-          if (imgEl) {
-            var imgSrc = imgEl.src;
-            menuItems.push({ label: 'Open Image in New Tab', action: function() { createTab(imgSrc); } });
-            menuItems.push({ label: 'Copy Image Address', action: function() {
-              try { var cb = require('nw.gui').Clipboard.get(); cb.set(imgSrc, 'text'); }
-              catch(err) { try { navigator.clipboard.writeText(imgSrc); } catch(e2) {} }
-            }});
-            menuItems.push({ separator: true });
-          }
-
-          // Selection context items
-          if (selectedText) {
-            var searchQuery = selectedText.substring(0, 80);
-            menuItems.push({ label: 'Copy', action: function() {
-              try { var cb = require('nw.gui').Clipboard.get(); cb.set(selectedText, 'text'); }
-              catch(err) { try { navigator.clipboard.writeText(selectedText); } catch(e2) {} }
-            }});
-            menuItems.push({ label: 'Search Google for "' + (searchQuery.length > 30 ? searchQuery.substring(0, 30) + '...' : searchQuery) + '"', action: function() {
-              createTab('https://www.google.com/search?q=' + encodeURIComponent(searchQuery));
-            }});
-            menuItems.push({ separator: true });
-          }
-
-          // Standard items
-          menuItems.push({ label: isBookmarked(tab.url) ? 'Remove Bookmark' : 'Bookmark This Page', shortcut: '\u2318D', action: function() {
-            if (isBookmarked(tab.url)) removeBookmark(tab.url);
-            else addBookmark(tab.url, tab.title);
-          }});
-          menuItems.push({ separator: true });
-          menuItems.push({ label: 'Copy Page URL', action: function() {
-            try { var cb = require('nw.gui').Clipboard.get(); cb.set(displayUrl, 'text'); }
-            catch(err) { try { navigator.clipboard.writeText(displayUrl); } catch(e2) {} }
-          }});
-          menuItems.push({ label: 'View Page Source', action: function() {
-            try {
-              var html = frame.contentDocument.documentElement.outerHTML;
-              var blob = new Blob([html], { type: 'text/plain' });
-              createTab(URL.createObjectURL(blob));
-            } catch(err) {}
-          }});
-          menuItems.push({ label: 'Find in Page', shortcut: '\u2318F', action: function() { toggleFindBar(); } });
-          menuItems.push({ separator: true });
-          menuItems.push({ label: 'Inspect Element', shortcut: 'F12', action: function() { if (win) win.showDevTools(); } });
-
-          showContextMenu(mx, my, menuItems);
-        });
-      } catch(e) {
-        // Cross-origin — cannot inject context menu
-      }
-    }
-
-    // ---- Shared frame event listener (iframe only — all zones use iframe + nwfaketop) ----
+    // ---- Frame event listeners ----
     function attachFrameListeners(tab, frame) {
       frame.addEventListener('load', function() {
         try {
@@ -1111,13 +216,9 @@
         tab.loading = false;
         tab.tabEl.classList.remove('nm-tab-loading');
 
-        // Inject right-click context menu into the iframe
         injectContextMenu(tab, frame);
-
-        // Record in browsing history
         recordHistory(tab.url, tab.title);
 
-        // Track navigation in navState
         var state = navState.get(tab.id);
         if (state && !state.isBackForward && tab.url !== state.lastUrl) {
           state.depth++;
@@ -1129,7 +230,6 @@
         updateAll();
       });
 
-      // Intercept target="_blank" links
       frame.addEventListener('new-window', function(e) {
         e.preventDefault();
         var targetUrl = e.targetUrl || e.url;
@@ -1144,11 +244,8 @@
       var id = 'tab-' + tabCounter;
       var zone = classifyZone(url);
 
-      // Track navigation state
       navState.set(id, { depth: 0, forwardDepth: 0, openerId: openerId || null, lastUrl: url, isBackForward: false });
 
-      // ALL zones use <iframe> with nwfaketop — full Node.js access everywhere.
-      // This is Nightmare: NO restrictions, full power, danger banner as warning only.
       var frame = document.createElement('iframe');
       frame.id = 'frame-' + id;
       frame.setAttribute('nwfaketop', '');
@@ -1191,7 +288,6 @@
       tabs.set(id, tab);
 
       attachFrameListeners(tab, frame);
-
       activateTab(id);
       return tab;
     }
@@ -1262,7 +358,6 @@
       var zoneColor = ZONE_COLORS[tab.zone] || '#585a64';
       dotEl.style.background = zoneColor;
       dotEl.style.boxShadow = '0 0 6px ' + zoneColor;
-      // SSL indicator: lock for https
       if (tab.url.startsWith('https://')) {
         dotEl.textContent = '\uD83D\uDD12';
         dotEl.title = 'Secure Connection (HTTPS)';
@@ -1270,7 +365,6 @@
         dotEl.textContent = '';
         dotEl.title = tab.zone;
       }
-      // Update favicon display
       if (tab.favicon && tab.faviconEl) {
         tab.faviconEl.src = tab.favicon;
         tab.faviconEl.style.display = 'inline';
@@ -1334,11 +428,32 @@
       document.title = title;
     }
 
+    function updateBookmarkButton() {
+      var tab = getActiveTab();
+      var btn = document.getElementById('nm-btn-bookmark');
+      if (!tab) return;
+      if (isBookmarked(tab.url)) {
+        btn.textContent = '\u2605';
+        btn.title = 'Remove bookmark';
+        btn.style.color = '#fbbf24';
+      } else {
+        btn.textContent = '\u2606';
+        btn.title = 'Bookmark this page';
+        btn.style.color = '';
+      }
+    }
+
     setInterval(function() {
       document.getElementById('nm-status-clock').textContent = new Date().toLocaleTimeString();
     }, 1000);
+  </script>
 
-    // ---- Navigation ----
+  <!-- Phase 4: HTTP server + API -->
+  <script src="js/server.js"></script>
+
+  <!-- Phase 5: Event handlers + init -->
+  <script>
+    // ---- Navigation buttons ----
     document.getElementById('nm-btn-back').addEventListener('click', function() {
       var tab = getActiveTab();
       if (!tab) return;
@@ -1373,28 +488,20 @@
     });
     document.getElementById('nm-btn-home').addEventListener('click', function() {
       var tab = getActiveTab();
-      if (tab) {
-        navigateTab(tab, resolveUrl(HOME_URL));
-      }
+      if (tab) navigateTab(tab, resolveUrl(HOME_URL));
     });
 
     document.getElementById('nm-url-input').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         var tab = getActiveTab();
-        if (tab) {
-          navigateTab(tab, resolveUrl(this.value));
-        }
+        if (tab) navigateTab(tab, resolveUrl(this.value));
         this.blur();
       }
     });
-
-    document.getElementById('nm-url-input').addEventListener('focus', function() {
-      this.select();
-    });
-
+    document.getElementById('nm-url-input').addEventListener('focus', function() { this.select(); });
     document.getElementById('nm-new-tab').addEventListener('click', function() { createTab(); });
 
-    // ---- Window controls (null-safe) ----
+    // ---- Window controls ----
     document.getElementById('nm-btn-minimize').addEventListener('click', function() { if (win) win.minimize(); });
     document.getElementById('nm-btn-maximize').addEventListener('click', function() {
       if (!win) return;
@@ -1405,153 +512,13 @@
     document.getElementById('nm-btn-close').addEventListener('click', function() { if (win) win.close(); });
     document.getElementById('nm-btn-devtools').addEventListener('click', function() { if (win) win.showDevTools(); });
 
-    // ---- Bookmark button (star) ----
+    // ---- Bookmark button ----
     document.getElementById('nm-btn-bookmark').addEventListener('click', function() {
       var tab = getActiveTab();
       if (!tab) return;
-      if (isBookmarked(tab.url)) {
-        removeBookmark(tab.url);
-      } else {
-        addBookmark(tab.url, tab.title);
-      }
+      if (isBookmarked(tab.url)) removeBookmark(tab.url);
+      else addBookmark(tab.url, tab.title);
     });
-    function updateBookmarkButton() {
-      var tab = getActiveTab();
-      var btn = document.getElementById('nm-btn-bookmark');
-      if (!tab) return;
-      if (isBookmarked(tab.url)) {
-        btn.textContent = '\u2605'; // filled star
-        btn.title = 'Remove bookmark';
-        btn.style.color = '#fbbf24';
-      } else {
-        btn.textContent = '\u2606'; // empty star
-        btn.title = 'Bookmark this page';
-        btn.style.color = '';
-      }
-    }
-
-    // ---- Find in page ----
-    function toggleFindBar() {
-      var existing = document.getElementById('nm-find-bar');
-      if (existing) {
-        existing.remove();
-        findBarVisible = false;
-        return;
-      }
-      findBarVisible = true;
-      var bar = document.createElement('div');
-      bar.id = 'nm-find-bar';
-      bar.style.cssText = 'position:fixed;top:80px;right:20px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:8px 12px;z-index:9999;display:flex;gap:8px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
-
-      var input = document.createElement('input');
-      input.type = 'text';
-      input.placeholder = 'Find in page...';
-      input.style.cssText = 'width:200px;height:28px;background:#08090f;border:1px solid #333;border-radius:4px;padding:0 8px;color:#f0eeeb;font-family:inherit;font-size:13px;outline:none;';
-      bar.appendChild(input);
-
-      var countSpan = document.createElement('span');
-      countSpan.style.cssText = 'font-size:11px;color:#585a64;min-width:40px;';
-      bar.appendChild(countSpan);
-
-      var closeBtn = document.createElement('button');
-      closeBtn.textContent = '\u2715';
-      closeBtn.style.cssText = 'background:none;border:none;color:#585a64;cursor:pointer;font-size:14px;padding:2px 6px;';
-      closeBtn.addEventListener('click', function() { bar.remove(); findBarVisible = false; clearFindHighlights(); });
-      bar.appendChild(closeBtn);
-
-      document.body.appendChild(bar);
-      input.focus();
-
-      var searchTimer = null;
-      input.addEventListener('input', function() {
-        clearTimeout(searchTimer);
-        var q = input.value;
-        searchTimer = setTimeout(function() { doFind(q, countSpan); }, 150);
-      });
-      input.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') { bar.remove(); findBarVisible = false; clearFindHighlights(); }
-        if (e.key === 'Enter') { doFind(input.value, countSpan); }
-      });
-    }
-
-    function doFind(query, countEl) {
-      clearFindHighlights();
-      if (!query) { countEl.textContent = ''; return; }
-      var tab = getActiveTab();
-      if (!tab) return;
-      try {
-        var frameWin = tab.frame.contentWindow;
-        // Use native window.find for highlight
-        var found = frameWin.find(query, false, false, true, false, false, false);
-        if (found) {
-          countEl.textContent = 'Found';
-          countEl.style.color = '#4ade80';
-        } else {
-          countEl.textContent = 'No match';
-          countEl.style.color = '#ff4444';
-        }
-      } catch(e) {
-        countEl.textContent = 'Error';
-        countEl.style.color = '#ff4444';
-      }
-    }
-
-    function clearFindHighlights() {
-      var tab = getActiveTab();
-      if (!tab) return;
-      try { tab.frame.contentWindow.getSelection().removeAllRanges(); } catch(e) {}
-    }
-
-    // ---- Shared context menu helper ----
-    function showContextMenu(x, y, items) {
-      var existing = document.getElementById('nm-context-menu');
-      if (existing) existing.remove();
-
-      var menu = document.createElement('div');
-      menu.id = 'nm-context-menu';
-      menu.style.cssText = 'position:fixed;top:' + y + 'px;left:' + x + 'px;background:#12142a;border:1px solid #2a2d44;border-radius:6px;padding:4px 0;z-index:9999;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,0.7);font-size:13px;font-family:inherit;';
-
-      items.forEach(function(item) {
-        if (item.separator) {
-          var sep = document.createElement('div');
-          sep.style.cssText = 'height:1px;background:#2a2d44;margin:4px 0;';
-          menu.appendChild(sep);
-          return;
-        }
-        var el = document.createElement('div');
-        el.style.cssText = 'padding:7px 16px;cursor:pointer;color:#d0d0d8;display:flex;justify-content:space-between;align-items:center;';
-        if (item.disabled) {
-          el.style.opacity = '0.4';
-          el.style.cursor = 'default';
-        }
-        var labelSpan = document.createElement('span');
-        labelSpan.textContent = item.label;
-        el.appendChild(labelSpan);
-        if (item.shortcut) {
-          var scSpan = document.createElement('span');
-          scSpan.textContent = item.shortcut;
-          scSpan.style.cssText = 'font-size:11px;color:#585a64;margin-left:24px;';
-          el.appendChild(scSpan);
-        }
-        if (!item.disabled) {
-          el.addEventListener('mouseenter', function() { el.style.background = '#1e2248'; });
-          el.addEventListener('mouseleave', function() { el.style.background = 'none'; });
-          el.addEventListener('click', function() { item.action(); menu.remove(); });
-        }
-        menu.appendChild(el);
-      });
-
-      // Clamp to viewport
-      document.body.appendChild(menu);
-      var rect = menu.getBoundingClientRect();
-      if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
-      if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
-
-      var removeMenu = function(e) {
-        if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', removeMenu); }
-      };
-      setTimeout(function() { document.addEventListener('mousedown', removeMenu); }, 0);
-    }
 
     // ---- Page right-click context menu ----
     document.getElementById('nm-content-area').addEventListener('contextmenu', function(e) {
@@ -1575,28 +542,19 @@
         }},
         { separator: true },
         { label: 'Copy URL', action: function() {
-          try {
-            var clipboard = require('nw.gui').Clipboard.get();
-            clipboard.set(displayUrl, 'text');
-          } catch(err) {
-            try { navigator.clipboard.writeText(displayUrl); } catch(e2) {}
-          }
+          try { var clipboard = require('nw.gui').Clipboard.get(); clipboard.set(displayUrl, 'text'); }
+          catch(err) { try { navigator.clipboard.writeText(displayUrl); } catch(e2) {} }
         }},
         { label: 'Copy Page Title', action: function() {
-          try {
-            var clipboard = require('nw.gui').Clipboard.get();
-            clipboard.set(tab.title, 'text');
-          } catch(err) {
-            try { navigator.clipboard.writeText(tab.title); } catch(e2) {}
-          }
+          try { var clipboard = require('nw.gui').Clipboard.get(); clipboard.set(tab.title, 'text'); }
+          catch(err) { try { navigator.clipboard.writeText(tab.title); } catch(e2) {} }
         }},
         { separator: true },
         { label: 'View Page Source', action: function() {
           try {
             var html = tab.frame.contentDocument.documentElement.outerHTML;
             var blob = new Blob([html], { type: 'text/plain' });
-            var srcUrl = URL.createObjectURL(blob);
-            createTab(srcUrl);
+            createTab(URL.createObjectURL(blob));
           } catch(err) {}
         }},
         { label: 'Find in Page', shortcut: '\u2318F', action: function() { toggleFindBar(); } },
@@ -1628,7 +586,6 @@
         var cm = document.getElementById('nm-context-menu');
         if (cm) cm.remove();
       }
-      // Tab switching with Ctrl+1-9
       if (ctrl && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         var idx = parseInt(e.key, 10) - 1;
@@ -1668,7 +625,7 @@
       ]);
     });
 
-    // ---- Listen for messages from internal pages (newtab, bookmarks, history) ----
+    // ---- Listen for messages from internal pages ----
     window.addEventListener('message', function(e) {
       if (e.data && e.data.type === 'nightmare-navigate' && e.data.url) {
         var tab = getActiveTab();

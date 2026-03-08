@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     files: ['src/**/*.ts'],
-    ignores: ['**/*.test.ts'],
+    ignores: ['**/*.test.ts', 'src/browser/_unused/**'],
     extends: [
       ...tseslint.configs.strictTypeChecked,
     ],
