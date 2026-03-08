@@ -137,10 +137,21 @@ describe('SessionManager', () => {
     it('activates first tab when activeTabIndex is out of bounds', () => {
       tabManager.createTab('file:///a.html');
       const json = sessionManager.toJSON(tabManager);
-      json.activeTabIndex = 99;
+      const modified = { ...json, activeTabIndex: 99 };
 
       const restored = new TabManager();
-      sessionManager.fromJSON(json, restored);
+      sessionManager.fromJSON(modified, restored);
+
+      expect(restored.getActiveTab()?.url).toBe('file:///a.html');
+    });
+
+    it('activates first tab when activeTabIndex is negative', () => {
+      tabManager.createTab('file:///a.html');
+      const json = sessionManager.toJSON(tabManager);
+      const modified = { ...json, activeTabIndex: -1 };
+
+      const restored = new TabManager();
+      sessionManager.fromJSON(modified, restored);
 
       expect(restored.getActiveTab()?.url).toBe('file:///a.html');
     });

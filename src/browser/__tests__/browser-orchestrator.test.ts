@@ -56,14 +56,18 @@ describe('BrowserOrchestrator', () => {
     expect(browser.consoleCapture).toBeDefined();
   });
 
-  it('handles keyboard shortcut matching', () => {
-    const action = browser.matchShortcut('t', { ctrl: true });
-    expect(action).toBe('new-tab');
+  it('handles keyboard shortcut via handleShortcut', () => {
+    const shortcuts = browser.getShortcuts();
+    let called = false;
+    shortcuts.register('Ctrl+T', 'new-tab', () => { called = true; });
+    const matched = browser.handleShortcut('T', { ctrl: true });
+    expect(matched).toBe(true);
+    expect(called).toBe(true);
   });
 
-  it('returns null for unmatched shortcut', () => {
-    const action = browser.matchShortcut('z', {});
-    expect(action).toBeNull();
+  it('returns false for unmatched shortcut', () => {
+    const matched = browser.handleShortcut('z', {});
+    expect(matched).toBe(false);
   });
 
   it('provides downloads manager', () => {

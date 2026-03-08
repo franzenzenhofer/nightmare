@@ -70,8 +70,18 @@ export class BrowserOrchestrator {
     };
   }
 
-  matchShortcut(key: string, modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean }): string | null {
-    return this.shortcuts.match(key, modifiers);
+  handleShortcut(key: string, modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean }): boolean {
+    return this.shortcuts.handleKeyEvent({
+      key,
+      ctrl: modifiers.ctrl === true,
+      shift: modifiers.shift === true,
+      alt: modifiers.alt === true,
+      meta: modifiers.meta === true,
+    });
+  }
+
+  getShortcuts(): KeyboardShortcuts {
+    return this.shortcuts;
   }
 
   getApiPort(): number {
