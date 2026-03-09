@@ -17,7 +17,7 @@
 
 .nm-zone-dot.zone-web {
   background: var(--nm-zone-web-fg);
-  box-shadow: 0 0 4px var(--nm-zone-web-fg);
+  box-shadow: 0 0 6px var(--nm-zone-web-fg), 0 0 12px rgba(255, 21, 21, 0.5);
 }
 
 .nm-url-bar.zone-local {

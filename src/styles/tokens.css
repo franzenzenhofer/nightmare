@@ -1,46 +1,46 @@
 :root {
-  /* ---- Stranger Things Dark: deep void blacks + neon red accents ---- */
-  --nm-bg-primary: #050508;
-  --nm-bg-secondary: #0a0c14;
-  --nm-bg-tertiary: #10131f;
-  --nm-bg-hover: #181c2e;
-  --nm-bg-active: #1e2438;
-  --nm-bg-input: #08090f;
-  --nm-tab-bg: #08090f;
-  --nm-tab-active-bg: #10131f;
-  --nm-tab-hover-bg: #0e1020;
-  --nm-tab-border: #1a1d2e;
+  /* ---- Stranger Things: void black + deep navy + neon red ---- */
+  --nm-bg-primary: #03030a;
+  --nm-bg-secondary: #08091a;
+  --nm-bg-tertiary: #0d0f24;
+  --nm-bg-hover: #151838;
+  --nm-bg-active: #1a1e42;
+  --nm-bg-input: #050614;
+  --nm-tab-bg: #050614;
+  --nm-tab-active-bg: #0d0f24;
+  --nm-tab-hover-bg: #0a0c1e;
+  --nm-tab-border: #1a1d3a;
 
-  /* ---- Accent: Stranger Things red ---- */
-  --nm-accent: #e63946;
-  --nm-accent-dim: #8b1a22;
-  --nm-accent-glow: rgba(230, 57, 70, 0.15);
-  --nm-accent-bright: #ff4757;
+  /* ---- Accent: Stranger Things neon red ---- */
+  --nm-accent: #ff1515;
+  --nm-accent-dim: #8b0a0a;
+  --nm-accent-glow: rgba(255, 21, 21, 0.2);
+  --nm-accent-bright: #ff3333;
 
   /* ---- Security Zones ---- */
-  --nm-zone-local-bg: #0a1f12;
+  --nm-zone-local-bg: #061a0e;
   --nm-zone-local-fg: #4ade80;
   --nm-zone-local-border: #166534;
-  --nm-zone-localhost-bg: #081428;
-  --nm-zone-localhost-fg: #60a5fa;
-  --nm-zone-localhost-border: #1e3a5f;
-  --nm-zone-web-bg: #3a0808;
-  --nm-zone-web-fg: #ff3333;
+  --nm-zone-localhost-bg: #060d28;
+  --nm-zone-localhost-fg: #3a5fe5;
+  --nm-zone-localhost-border: #1e2f6f;
+  --nm-zone-web-bg: #2a0505;
+  --nm-zone-web-fg: #ff1515;
   --nm-zone-web-border: #cc0000;
-  --nm-zone-web-glow: rgba(255, 0, 0, 0.3);
+  --nm-zone-web-glow: rgba(255, 21, 21, 0.4);
 
-  /* ---- Text: higher contrast ---- */
-  --nm-text-primary: #f0eeeb;
-  --nm-text-secondary: #9a9ca3;
-  --nm-text-muted: #585a64;
-  --nm-text-url: #f0eeeb;
+  /* ---- Text: cold white on void ---- */
+  --nm-text-primary: #e8e6e3;
+  --nm-text-secondary: #8a8da0;
+  --nm-text-muted: #484b62;
+  --nm-text-url: #e8e6e3;
   --nm-text-url-host: #ffffff;
-  --nm-text-url-path: #9a9ca3;
+  --nm-text-url-path: #8a8da0;
 
-  /* ---- Fonts ---- */
-  --nm-font-ui: 'Geist', system-ui, sans-serif;
-  --nm-font-mono: 'JetBrains Mono', 'Cascadia Code', monospace;
-  --nm-font-url: 'Geist Mono', 'JetBrains Mono', monospace;
+  /* ---- Fonts: monospace only, no external fonts ---- */
+  --nm-font-ui: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+  --nm-font-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+  --nm-font-url: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
 
   /* ---- Layout ---- */
   --nm-titlebar-h: 32px;

@@ -16,7 +16,8 @@ html, body {
 #nm-browser {
   display: flex; flex-direction: column;
   height: 100vh; width: 100vw;
-  border: 1px solid #1a1d2e;
+  border: 1px solid #1a1d3a;
+  box-shadow: inset 0 0 80px rgba(10, 12, 40, 0.8), 0 0 1px rgba(255, 21, 21, 0.3);
   overflow: hidden;
 }
 
@@ -36,9 +37,11 @@ html, body {
   flex: 1; font-size: var(--nm-text-sm);
   color: var(--nm-accent);
   text-align: center;
-  letter-spacing: 2px;
-  text-shadow: 0 0 8px rgba(230, 57, 70, 0.3);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(255, 21, 21, 0.6), 0 0 20px rgba(255, 21, 21, 0.3);
   font-family: var(--nm-font-mono);
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -67,6 +70,7 @@ html, body {
 #nm-titlebar .nm-window-controls button#nm-btn-close:hover {
   background: var(--nm-accent);
   color: white;
+  box-shadow: 0 0 8px rgba(255, 21, 21, 0.5);
 }
 
 /* ---- Tab bar ---- */
@@ -104,6 +108,7 @@ html, body {
 #nm-nav-bar button:hover:not(:disabled) {
   background: var(--nm-bg-hover);
   color: var(--nm-accent);
+  text-shadow: 0 0 6px rgba(255, 21, 21, 0.4);
 }
 
 #nm-nav-bar button:disabled { opacity: 0.2; cursor: default; }
@@ -125,7 +130,7 @@ html, body {
 
 .nm-url-bar:focus {
   border-color: var(--nm-accent);
-  box-shadow: 0 0 0 1px var(--nm-accent-dim), 0 0 12px var(--nm-accent-glow);
+  box-shadow: 0 0 0 1px var(--nm-accent-dim), 0 0 16px var(--nm-accent-glow), 0 0 30px rgba(255, 21, 21, 0.1);
 }
 
 /* ---- Zone dot (in URL bar) ---- */
@@ -167,6 +172,7 @@ html, body {
 #nm-bookmarks-bar a:hover, #nm-bookmarks-bar .nm-bookmark:hover {
   background: var(--nm-bg-hover);
   color: var(--nm-accent);
+  text-shadow: 0 0 6px rgba(255, 21, 21, 0.4);
 }
 
 /* ---- Content area ---- */
@@ -204,4 +210,7 @@ html, body {
 
 #nm-status-bar #nm-status-zone {
   color: var(--nm-accent);
+  text-shadow: 0 0 6px rgba(255, 21, 21, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
