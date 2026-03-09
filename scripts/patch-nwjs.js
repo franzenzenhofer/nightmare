@@ -4,7 +4,7 @@
  * Run after `npm install` or before `npm run dev`.
  */
 
-import { copyFileSync, existsSync, readdirSync } from 'fs';
+import { copyFileSync, existsSync, readdirSync, symlinkSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const ICON_SRC = join(ROOT, 'src', 'assets', 'icon.icns');
+const APP_SRC = join(ROOT, 'src');
 const NW_DIR = join(ROOT, 'node_modules', 'nw');
 
 // Find the app bundle (either Nightmare.app or nwjs.app)
@@ -37,6 +38,12 @@ if (!nwjsApp) {
 
 const plist = join(nwjsApp, 'Contents', 'Info.plist');
 const iconDst = join(nwjsApp, 'Contents', 'Resources', 'app.icns');
+const appDst = join(nwjsApp, 'Contents', 'Resources', 'app.nw');
+
+if (process.platform === 'darwin' && existsSync(APP_SRC) && !existsSync(appDst)) {
+  symlinkSync(APP_SRC, appDst, 'dir');
+  console.log('[patch-nwjs] app.nw symlink created');
+}
 
 // Replace icon
 if (existsSync(ICON_SRC) && existsSync(iconDst)) {

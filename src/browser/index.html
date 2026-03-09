@@ -62,7 +62,13 @@
     </div>
   </div>
 
+  <script src="./dist/nightmare-runtime.js"></script>
   <script>
+    var nightmareRuntime = window.Nightmare;
+    if (!nightmareRuntime || !nightmareRuntime.SecurityZones || !nightmareRuntime.SecurityBannerLogic) {
+      throw new Error('Nightmare runtime bundle missing. Run "npm run build:browser-runtime".');
+    }
+
     // ---- Window object (robust: try modern API first, then legacy) ----
     var win = null;
     try {
@@ -87,7 +93,8 @@
     var tabs = new Map();
     var activeTabId = null;
     var tabCounter = 0;
-    var dismissedBanners = new Set();
+    var securityZones = new nightmareRuntime.SecurityZones();
+    var securityBanner = new nightmareRuntime.SecurityBannerLogic();
     var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
     var navState = new Map(); // tabId -> { depth, forwardDepth, openerId, lastUrl, isBackForward }
     var findBarVisible = false;
@@ -187,48 +194,20 @@
       return 'http://127.0.0.1:' + API_PORT + '/proxy/' + encodeURIComponent(webUrl);
     }
 
+    var _displayUrlConfig = { apiPort: API_PORT, samplesDir: samplesDir, pagesDir: pagesDir };
     function toDisplayUrl(internalUrl) {
-      var filePrefix = 'http://127.0.0.1:' + API_PORT + '/file/';
-      var proxyPrefix = 'http://127.0.0.1:' + API_PORT + '/proxy/';
-      // Proxy URL: show the original external URL
+      var proxyPrefix = 'http://127.0.0.1:' + _displayUrlConfig.apiPort + '/proxy/';
       if (internalUrl.startsWith(proxyPrefix)) {
         return decodeURIComponent(internalUrl.slice(proxyPrefix.length));
       }
-      // File URL: show nightmare:// scheme
-      if (internalUrl.startsWith(filePrefix)) {
-        var filePath = decodeURIComponent(internalUrl.slice(filePrefix.length));
-        if (filePath.startsWith(samplesDir)) {
-          var name = path.basename(filePath, '.html');
-          return 'nightmare://' + (name === 'hello' ? 'home' : name);
-        }
-        if (filePath.startsWith(pagesDir)) {
-          return 'nightmare://' + path.basename(filePath, '.html');
-        }
-        return 'nightmare://' + filePath;
-      }
-      return internalUrl;
+      return nightmareRuntime.toDisplayUrl(internalUrl, _displayUrlConfig);
     }
 
     function tabToJson(t) {
       return { id: t.id, url: t.url, displayUrl: toDisplayUrl(t.url), title: t.title, zone: t.zone };
     }
 
-    function serveMimeType(ext) {
-      var m = {
-        '.html': 'text/html', '.htm': 'text/html',
-        '.css': 'text/css', '.js': 'application/javascript',
-        '.json': 'application/json', '.png': 'image/png',
-        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif', '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon', '.woff': 'font/woff',
-        '.woff2': 'font/woff2', '.ttf': 'font/ttf',
-        '.mp3': 'audio/mpeg', '.mp4': 'video/mp4',
-        '.wasm': 'application/wasm', '.xml': 'application/xml',
-        '.txt': 'text/plain', '.md': 'text/plain',
-        '.ts': 'text/plain', '.tsx': 'text/plain'
-      };
-      return m[ext] || 'application/octet-stream';
-    }
+    var serveMimeType = nightmareRuntime.getMimeType;
 
     // ---- Minimal Markdown to HTML renderer ----
     function renderMarkdown(md) {
@@ -836,6 +815,7 @@
         API_PORT = 0;
         server.listen(0, '127.0.0.1', function() {
           API_PORT = server.address().port;
+          _displayUrlConfig.apiPort = API_PORT;
           console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT + ' (fallback)');
           safeInitBrowser();
         });
@@ -846,6 +826,7 @@
 
     server.listen(API_PORT, '127.0.0.1', function() {
       API_PORT = server.address().port;
+      _displayUrlConfig.apiPort = API_PORT;
       console.log('[Nightmare] Server on http://127.0.0.1:' + API_PORT);
       safeInitBrowser();
     });
@@ -859,31 +840,15 @@
     }
 
     // ---- Zone classification ----
-    function classifyZone(url) {
-      // Proxy URLs are WEB zone
-      var proxyPrefix = 'http://127.0.0.1:' + API_PORT + '/proxy/';
-      if (url.startsWith(proxyPrefix)) return 'WEB';
-      try {
-        var parsed = new URL(url);
-        if (parsed.protocol === 'file:') return 'LOCAL';
-        if (parsed.protocol === 'nightmare:') return 'LOCAL';
-        var h = parsed.hostname;
-        if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0'
-            || h.endsWith('.localhost')
-            || /^192\.168\.\d+\.\d+$/.test(h)
-            || /^10\.\d+\.\d+\.\d+$/.test(h)
-            || /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(h)) return 'LOCALHOST';
-        return 'WEB';
-      } catch (e) { return 'LOCAL'; }
+    function getClassifiedUrl(url) {
+      return toDisplayUrl(url);
+    }
+
+    function getZone(url) {
+      return securityZones.classify(getClassifiedUrl(url));
     }
 
     var ZONE_COLORS = { LOCAL: '#4ade80', LOCALHOST: '#60a5fa', WEB: '#ff3333' };
-    var ZONE_CSS = { LOCAL: 'local', LOCALHOST: 'localhost', WEB: 'web' };
-    var ZONE_MSG = {
-      LOCAL: 'LOCAL FILE  //  Node.js active  //  Full system access',
-      LOCALHOST: 'LOCALHOST  //  Node.js active  //  Full system access',
-      WEB: 'THIS WEBSITE HAS FULL NODE.JS ACCESS  //  require() fs process child_process  //  NO SANDBOX'
-    };
 
     // ---- URL resolution ----
     function resolveUrl(input) {
@@ -942,7 +907,7 @@
     // ---- Navigate a tab (recreates iframe if zone changes) ----
     function navigateTab(tab, newUrl) {
       var oldZone = tab.zone;
-      var newZone = classifyZone(newUrl);
+      var newZone = getZone(newUrl);
       tab.url = newUrl;
       tab.zone = newZone;
 
@@ -1100,7 +1065,7 @@
           if (doc) {
             tab.title = doc.title || tab.url;
             tab.url = frame.contentWindow.location.href;
-            tab.zone = classifyZone(tab.url);
+            tab.zone = getZone(tab.url);
             var iconLink = doc.querySelector('link[rel~="icon"]');
             tab.favicon = iconLink ? iconLink.href : null;
           }
@@ -1142,7 +1107,7 @@
       url = resolveUrl(url || HOME_URL);
       tabCounter++;
       var id = 'tab-' + tabCounter;
-      var zone = classifyZone(url);
+      var zone = getZone(url);
 
       // Track navigation state
       navState.set(id, { depth: 0, forwardDepth: 0, openerId: openerId || null, lastUrl: url, isBackForward: false });
@@ -1203,7 +1168,7 @@
       tab.tabEl.remove();
       tabs.delete(id);
       navState.delete(id);
-      dismissedBanners.delete(id);
+      securityBanner.reset(id);
       if (activeTabId === id) {
         var remaining = Array.from(tabs.keys());
         if (remaining.length > 0) {
@@ -1284,30 +1249,31 @@
       var banner = document.getElementById('nm-security-banner');
       if (!tab) { banner.style.display = 'none'; return; }
       var zone = tab.zone;
-      if (zone !== 'WEB' && dismissedBanners.has(tab.id)) {
+      var config = securityBanner.getBannerState(tab.id, zone);
+      if (!config) {
         banner.style.display = 'none';
         return;
       }
       banner.style.display = 'flex';
-      banner.className = 'zone-' + ZONE_CSS[zone];
+      banner.className = 'visible zone-' + zone.toLowerCase();
       while (banner.firstChild) banner.removeChild(banner.firstChild);
 
       var iconSpan = document.createElement('span');
       iconSpan.className = 'nm-banner-icon';
-      iconSpan.textContent = zone === 'WEB' ? '\u2620' : zone === 'LOCAL' ? '\u2714' : '\u2139';
+      iconSpan.textContent = config.icon;
       banner.appendChild(iconSpan);
 
       var msgSpan = document.createElement('span');
       msgSpan.className = 'nm-banner-text';
-      msgSpan.textContent = ZONE_MSG[zone];
+      msgSpan.textContent = config.message;
       banner.appendChild(msgSpan);
 
-      if (zone !== 'WEB') {
+      if (config.dismissable) {
         var dismissBtn = document.createElement('button');
         dismissBtn.className = 'nm-banner-dismiss';
         dismissBtn.textContent = '\u2715';
         dismissBtn.addEventListener('click', function() {
-          dismissedBanners.add(tab.id);
+          securityBanner.dismiss(tab.id);
           banner.style.display = 'none';
         });
         banner.appendChild(dismissBtn);
