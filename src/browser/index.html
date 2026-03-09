@@ -90,11 +90,24 @@
     console.log('[Nightmare] Modules loaded, win:', !!win);
 
     // ---- State ----
-    var tabs = new Map();
-    var activeTabId = null;
-    var tabCounter = 0;
+    var tabManager = new nightmareRuntime.TabManager();
+    var eventBus = new nightmareRuntime.EventBus();
+    var tabDom = new Map(); // tabId -> { frame, tabEl, titleSpan, faviconEl }
     var securityZones = new nightmareRuntime.SecurityZones();
     var securityBanner = new nightmareRuntime.SecurityBannerLogic();
+
+    // Helper: get merged tab object (data from TabManager + DOM refs from tabDom)
+    function getFullTab(id) {
+      var data = tabManager.getTab(id);
+      if (!data) return null;
+      var dom = tabDom.get(id);
+      if (!dom) return null;
+      return { id: data.id, url: data.url, title: data.title, zone: data.zone,
+               favicon: data.favicon, loading: data.loading, pinned: data.pinned,
+               openerId: data.openerId, frame: dom.frame, tabEl: dom.tabEl,
+               titleSpan: dom.titleSpan, faviconEl: dom.faviconEl };
+    }
+
     var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
     var navState = new Map(); // tabId -> { depth, forwardDepth, openerId, lastUrl, isBackForward }
     var findBarVisible = false;
@@ -192,7 +205,8 @@
     }
 
     function tabToJson(t) {
-      return { id: t.id, url: t.url, displayUrl: toDisplayUrl(t.url), title: t.title, zone: t.zone };
+      var url = t.url || '';
+      return { id: t.id, url: url, displayUrl: toDisplayUrl(url), title: t.title, zone: t.zone };
     }
 
     var serveMimeType = nightmareRuntime.getMimeType;
@@ -318,13 +332,13 @@
       res.setHeader('Content-Type', 'application/json');
 
       if (url === '/api/state' && req.method === 'GET') {
-        var tabList = [];
-        tabs.forEach(function(t) { tabList.push(tabToJson(t)); });
+        var tabList = tabManager.getAllTabs().map(tabToJson);
+        var active = tabManager.getActiveTab();
         res.writeHead(200);
         res.end(JSON.stringify({
           tabs: tabList,
-          activeTabId: activeTabId,
-          tabCount: tabs.size,
+          activeTabId: active ? active.id : null,
+          tabCount: tabManager.getTabCount(),
           nodeVersion: process.version,
           apiPort: API_PORT,
           platform: process.platform,
@@ -336,10 +350,8 @@
       }
 
       if (url === '/api/tabs' && req.method === 'GET') {
-        var list = [];
-        tabs.forEach(function(t) { list.push(tabToJson(t)); });
         res.writeHead(200);
-        res.end(JSON.stringify(list));
+        res.end(JSON.stringify(tabManager.getAllTabs().map(tabToJson)));
         return;
       }
 
@@ -359,7 +371,7 @@
       // Tab-specific endpoints
       var tabIdMatch = url.match(/^\/api\/tabs\/([^/]+)$/);
       if (tabIdMatch && req.method === 'GET') {
-        var t = tabs.get(tabIdMatch[1]);
+        var t = tabManager.getTab(tabIdMatch[1]);
         if (!t) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         res.writeHead(200);
         res.end(JSON.stringify(tabToJson(t)));
@@ -380,18 +392,19 @@
         req.on('end', function() {
           var parsed2 = {};
           try { parsed2 = JSON.parse(nbody); } catch(e) {}
-          var tab2 = tabs.get(navMatch[1]);
+          var tab2 = getFullTab(navMatch[1]);
           if (!tab2) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
           navigateTab(tab2, resolveUrl(parsed2.url));
+          var tab2data = tabManager.getTab(navMatch[1]);
           res.writeHead(200);
-          res.end(JSON.stringify(tabToJson(tab2)));
+          res.end(JSON.stringify(tabToJson(tab2data || tab2)));
         });
         return;
       }
 
       var reloadMatch = url.match(/^\/api\/tabs\/([^/]+)\/reload$/);
       if (reloadMatch && req.method === 'POST') {
-        var rt = tabs.get(reloadMatch[1]);
+        var rt = getFullTab(reloadMatch[1]);
         if (!rt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         rt.frame.src = rt.url;
         res.writeHead(200);
@@ -401,17 +414,17 @@
 
       var activateMatch = url.match(/^\/api\/tabs\/([^/]+)\/activate$/);
       if (activateMatch && req.method === 'POST') {
-        var at = tabs.get(activateMatch[1]);
-        if (!at) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
+        if (!tabManager.hasTab(activateMatch[1])) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         activateTab(activateMatch[1]);
+        var atData = tabManager.getTab(activateMatch[1]);
         res.writeHead(200);
-        res.end(JSON.stringify(tabToJson(at)));
+        res.end(JSON.stringify(tabToJson(atData)));
         return;
       }
 
       var htmlMatch = url.match(/^\/api\/tabs\/([^/]+)\/html$/);
       if (htmlMatch && req.method === 'GET') {
-        var ht = tabs.get(htmlMatch[1]);
+        var ht = getFullTab(htmlMatch[1]);
         if (!ht) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         executeInFrame(ht.frame, 'document.documentElement.outerHTML', function(err, htmlContent) {
           res.writeHead(200);
@@ -428,7 +441,7 @@
         req.on('end', function() {
           var eparsed = {};
           try { eparsed = JSON.parse(ebody); } catch(e) {}
-          var et = tabs.get(execMatch[1]);
+          var et = getFullTab(execMatch[1]);
           if (!et) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
           executeInFrame(et.frame, eparsed.code, function(err, result) {
             res.writeHead(200);
@@ -472,7 +485,7 @@
       // ---- Per-tab screenshot ----
       var tabScreenshotMatch = url.match(/^\/api\/tabs\/([^/]+)\/screenshot$/);
       if (tabScreenshotMatch && req.method === 'GET') {
-        var sst = tabs.get(tabScreenshotMatch[1]);
+        var sst = getFullTab(tabScreenshotMatch[1]);
         if (!sst) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         try {
           var canvas = document.createElement('canvas');
@@ -518,7 +531,7 @@
         req.on('end', function() {
           var cparsed = {};
           try { cparsed = JSON.parse(cbody); } catch(e) {}
-          var ct = tabs.get(clickMatch[1]);
+          var ct = getFullTab(clickMatch[1]);
           if (!ct) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
           var clickCode = 'var el = document.querySelector(' + JSON.stringify(cparsed.selector) + '); if (el) { el.click(); "clicked" } else { "not_found" }';
           executeInFrame(ct.frame, clickCode, function(err, clickResult) {
@@ -538,7 +551,7 @@
         req.on('end', function() {
           var tparsed = {};
           try { tparsed = JSON.parse(tbody); } catch(e) {}
-          var tt = tabs.get(typeMatch[1]);
+          var tt = getFullTab(typeMatch[1]);
           if (!tt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
           var typeCode = 'var el = document.querySelector(' + JSON.stringify(tparsed.selector) + '); if (el) { el.focus();' +
             (tparsed.clear ? ' el.value = "";' : '') +
@@ -563,7 +576,7 @@
         req.on('end', function() {
           var fparsed = {};
           try { fparsed = JSON.parse(fbody); } catch(e) {}
-          var ft = tabs.get(findMatch[1]);
+          var ft = getFullTab(findMatch[1]);
           if (!ft) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
           var findCode = '(function() { var els = document.querySelectorAll(' + JSON.stringify(fparsed.selector) + ');' +
             ' return JSON.stringify(Array.from(els).slice(0, ' + (fparsed.limit || 50) + ').map(function(el) {' +
@@ -595,7 +608,7 @@
         req.on('end', function() {
           var sparsed = {};
           try { sparsed = JSON.parse(sbody); } catch(e) {}
-          var st = tabs.get(scrollMatch[1]);
+          var st = getFullTab(scrollMatch[1]);
           if (!st) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
           var scrollCode;
           if (sparsed.selector) {
@@ -615,7 +628,7 @@
       // ---- Get page text content ----
       var textMatch = url.match(/^\/api\/tabs\/([^/]+)\/text$/);
       if (textMatch && req.method === 'GET') {
-        var txtt = tabs.get(textMatch[1]);
+        var txtt = getFullTab(textMatch[1]);
         if (!txtt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         var textCode = 'document.body ? document.body.innerText : ""';
         executeInFrame(txtt.frame, textCode, function(err, textResult) {
@@ -655,7 +668,7 @@
       // ---- Back/Forward/Reload via API ----
       var backMatch = url.match(/^\/api\/tabs\/([^/]+)\/back$/);
       if (backMatch && req.method === 'POST') {
-        var bt = tabs.get(backMatch[1]);
+        var bt = getFullTab(backMatch[1]);
         if (!bt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         var bstate = navState.get(bt.id);
         if (bstate && bstate.depth > 0) {
@@ -669,7 +682,7 @@
 
       var fwdMatch = url.match(/^\/api\/tabs\/([^/]+)\/forward$/);
       if (fwdMatch && req.method === 'POST') {
-        var fwdt = tabs.get(fwdMatch[1]);
+        var fwdt = getFullTab(fwdMatch[1]);
         if (!fwdt) { res.writeHead(404); res.end(JSON.stringify({error:'Tab not found'})); return; }
         var fstate = navState.get(fwdt.id);
         if (fstate && fstate.forwardDepth > 0) {
@@ -812,16 +825,20 @@
     function navigateTab(tab, newUrl) {
       var oldZone = tab.zone;
       var newZone = getZone(newUrl);
-      tab.url = newUrl;
-      tab.zone = newZone;
+
+      // Update data in TabManager
+      tabManager.updateTabFromWebview(tab.id, { url: newUrl });
+
+      var dom = tabDom.get(tab.id);
+      if (!dom) return;
 
       // All zones use iframe + nwfaketop (full Node.js). Recreate only on zone change
       // because nwfaketop is read-once at iframe creation.
       if (oldZone !== newZone) {
-        var wasActive = tab.frame.classList.contains('active');
-        var parent = tab.frame.parentNode;
-        var oldId = tab.frame.id;
-        tab.frame.remove();
+        var wasActive = dom.frame.classList.contains('active');
+        var parent = dom.frame.parentNode;
+        var oldId = dom.frame.id;
+        dom.frame.remove();
 
         var newFrame = document.createElement('iframe');
         newFrame.id = oldId;
@@ -829,16 +846,19 @@
         newFrame.src = newUrl;
         if (wasActive) newFrame.classList.add('active');
         parent.appendChild(newFrame);
-        tab.frame = newFrame;
+        dom.frame = newFrame;
 
         // Reset navigation depth on zone change (iframe recreated, history lost)
         var zoneNavState = navState.get(tab.id);
         if (zoneNavState) { zoneNavState.depth = 0; zoneNavState.forwardDepth = 0; }
 
-        attachFrameListeners(tab, newFrame);
+        // Re-attach with merged tab for listeners
+        var fullTab = getFullTab(tab.id);
+        if (fullTab) attachFrameListeners(fullTab, newFrame);
       } else {
-        tab.frame.src = newUrl;
+        dom.frame.src = newUrl;
       }
+      eventBus.emit({ type: 'tab:navigated', tabId: tab.id, url: newUrl });
       updateAll();
     }
 
@@ -869,11 +889,17 @@
 
     // ---- Inject right-click context menu into iframe ----
     function injectContextMenu(tab, frame) {
+      var tabId = tab.id;
       try {
         var doc = frame.contentDocument;
         if (!doc) return;
         doc.addEventListener('contextmenu', function(e) {
           e.preventDefault();
+          // Re-fetch current tab data (original tab snapshot may be stale)
+          var currentTab = tabManager.getTab(tabId);
+          if (!currentTab) return;
+          var currentDom = tabDom.get(tabId);
+
           // Collect info about what was right-clicked
           var target = e.target;
           var linkEl = target.closest ? target.closest('a[href]') : null;
@@ -886,15 +912,15 @@
           var mx = e.clientX + frameRect.left;
           var my = e.clientY + frameRect.top;
 
-          var navSt = navState.get(tab.id);
-          var canBack = navSt && (navSt.depth > 0 || (navSt.openerId && tabs.has(navSt.openerId)));
+          var navSt = navState.get(tabId);
+          var canBack = navSt && (navSt.depth > 0 || (navSt.openerId && tabManager.hasTab(navSt.openerId)));
           var canFwd = navSt && navSt.forwardDepth > 0;
-          var displayUrl = toDisplayUrl(tab.url);
+          var displayUrl = toDisplayUrl(currentTab.url);
 
           var menuItems = [
             { label: 'Back', shortcut: '\u2318\u2190', disabled: !canBack, action: function() { document.getElementById('nm-btn-back').click(); } },
             { label: 'Forward', shortcut: '\u2318\u2192', disabled: !canFwd, action: function() { document.getElementById('nm-btn-forward').click(); } },
-            { label: 'Reload', shortcut: '\u2318R', action: function() { tab.frame.src = tab.url; } },
+            { label: 'Reload', shortcut: '\u2318R', action: function() { if (currentDom) currentDom.frame.src = currentTab.url; } },
             { separator: true },
           ];
 
@@ -934,9 +960,9 @@
           }
 
           // Standard items
-          menuItems.push({ label: isBookmarked(tab.url) ? 'Remove Bookmark' : 'Bookmark This Page', shortcut: '\u2318D', action: function() {
-            if (isBookmarked(tab.url)) removeBookmark(tab.url);
-            else addBookmark(tab.url, tab.title);
+          menuItems.push({ label: isBookmarked(currentTab.url) ? 'Remove Bookmark' : 'Bookmark This Page', shortcut: '\u2318D', action: function() {
+            if (isBookmarked(currentTab.url)) removeBookmark(currentTab.url);
+            else addBookmark(currentTab.url, currentTab.title);
           }});
           menuItems.push({ separator: true });
           menuItems.push({ label: 'Copy Page URL', action: function() {
@@ -963,38 +989,55 @@
 
     // ---- Shared frame event listener (iframe only — all zones use iframe + nwfaketop) ----
     function attachFrameListeners(tab, frame) {
+      var tabId = tab.id;
       frame.addEventListener('load', function() {
+        var newTitle = '';
+        var newUrl = '';
+        var newFavicon = null;
+        var data = tabManager.getTab(tabId);
+        if (!data) return;
         try {
           var doc = frame.contentDocument;
           if (doc) {
-            tab.title = doc.title || tab.url;
-            tab.url = frame.contentWindow.location.href;
-            tab.zone = getZone(tab.url);
+            newTitle = doc.title || data.url;
+            newUrl = frame.contentWindow.location.href;
             var iconLink = doc.querySelector('link[rel~="icon"]');
-            tab.favicon = iconLink ? iconLink.href : null;
+            newFavicon = iconLink ? iconLink.href : null;
           }
         } catch (e) {
-          tab.title = tab.url;
+          newTitle = data.url;
+          newUrl = data.url;
         }
-        tab.titleSpan.textContent = tab.title.length > 30 ? tab.title.substring(0, 30) + '...' : tab.title;
-        tab.loading = false;
-        tab.tabEl.classList.remove('nm-tab-loading');
+        // Update TabManager data
+        tabManager.updateTabFromWebview(tabId, {
+          title: newTitle, url: newUrl || data.url, favicon: newFavicon, loading: false
+        });
+
+        // Update DOM
+        var dom = tabDom.get(tabId);
+        if (dom) {
+          dom.titleSpan.textContent = newTitle.length > 30 ? newTitle.substring(0, 30) + '...' : newTitle;
+          dom.tabEl.classList.remove('nm-tab-loading');
+        }
 
         // Inject right-click context menu into the iframe
-        injectContextMenu(tab, frame);
+        var fullTab = getFullTab(tabId);
+        if (fullTab) injectContextMenu(fullTab, frame);
 
         // Record in browsing history
-        recordHistory(tab.url, tab.title);
+        var updatedData = tabManager.getTab(tabId);
+        recordHistory(updatedData.url, updatedData.title);
 
         // Track navigation in navState
-        var state = navState.get(tab.id);
-        if (state && !state.isBackForward && tab.url !== state.lastUrl) {
-          state.depth++;
-          state.forwardDepth = 0;
-          state.lastUrl = tab.url;
+        var navSt = navState.get(tabId);
+        if (navSt && !navSt.isBackForward && updatedData.url !== navSt.lastUrl) {
+          navSt.depth++;
+          navSt.forwardDepth = 0;
+          navSt.lastUrl = updatedData.url;
         }
-        if (state) state.isBackForward = false;
+        if (navSt) navSt.isBackForward = false;
 
+        eventBus.emit({ type: 'tab:loaded', tabId: tabId, title: updatedData.title });
         updateAll();
       });
 
@@ -1002,22 +1045,22 @@
       frame.addEventListener('new-window', function(e) {
         e.preventDefault();
         var targetUrl = e.targetUrl || e.url;
-        if (targetUrl) createTab(targetUrl, tab.id);
+        if (targetUrl) createTab(targetUrl, tabId);
       });
     }
 
     // ---- Tab management ----
     function createTab(url, openerId) {
       url = resolveUrl(url || HOME_URL);
-      tabCounter++;
-      var id = 'tab-' + tabCounter;
-      var zone = getZone(url);
+
+      // 1. Create tab data via TabManager (auto-activates)
+      var tab = tabManager.createTab(url, openerId);
+      var id = tab.id;
 
       // Track navigation state
       navState.set(id, { depth: 0, forwardDepth: 0, openerId: openerId || null, lastUrl: url, isBackForward: false });
 
-      // ALL zones use <iframe> with nwfaketop — full Node.js access everywhere.
-      // This is Nightmare: NO restrictions, full power, danger banner as warning only.
+      // 2. Create DOM elements
       var frame = document.createElement('iframe');
       frame.id = 'frame-' + id;
       frame.setAttribute('nwfaketop', '');
@@ -1056,49 +1099,77 @@
       var tabBar = document.getElementById('nm-tab-bar');
       tabBar.insertBefore(tabEl, document.getElementById('nm-new-tab'));
 
-      var tab = { id: id, url: url, title: 'Loading...', zone: zone, frame: frame, tabEl: tabEl, titleSpan: titleSpan, faviconEl: faviconEl, favicon: null, loading: true, openerId: openerId || null };
-      tabs.set(id, tab);
+      // 3. Store DOM references separately
+      tabDom.set(id, { frame: frame, tabEl: tabEl, titleSpan: titleSpan, faviconEl: faviconEl });
 
-      attachFrameListeners(tab, frame);
+      // 4. Attach listeners using merged tab
+      var fullTab = getFullTab(id);
+      attachFrameListeners(fullTab, frame);
 
+      // 5. Activate and emit event
       activateTab(id);
-      return tab;
+      eventBus.emit({ type: 'tab:created', tab: tabToJson(tab) });
+      return fullTab;
     }
 
     function closeTab(id) {
-      var tab = tabs.get(id);
-      if (!tab) return;
-      tab.frame.remove();
-      tab.tabEl.remove();
-      tabs.delete(id);
+      if (!tabManager.hasTab(id)) return;
+      var tab = tabManager.getTab(id);
+      if (tab && tab.pinned) return;
+
+      var wasActive = tabManager.getActiveTab() && tabManager.getActiveTab().id === id;
+      var isLastTab = tabManager.getTabCount() === 1;
+
+      // If closing the last tab, create a new one FIRST (avoids TabManager auto-create orphan)
+      if (isLastTab) {
+        createTab();
+      }
+
+      // Clean up DOM
+      var dom = tabDom.get(id);
+      if (dom) {
+        dom.frame.remove();
+        dom.tabEl.remove();
+      }
+      tabDom.delete(id);
       navState.delete(id);
       securityBanner.reset(id);
-      if (activeTabId === id) {
-        var remaining = Array.from(tabs.keys());
-        if (remaining.length > 0) {
-          activateTab(remaining[remaining.length - 1]);
-        } else {
-          createTab();
-        }
+
+      // Now close in TabManager (not the last tab anymore, no auto-create triggered)
+      tabManager.closeTab(id);
+
+      if (wasActive && !isLastTab) {
+        var newActive = tabManager.getActiveTab();
+        if (newActive) activateTab(newActive.id);
       }
+
+      eventBus.emit({ type: 'tab:closed', tabId: id });
       updateAll();
     }
 
     function activateTab(id) {
-      var tab = tabs.get(id);
-      if (!tab) return;
-      tabs.forEach(function(t) {
-        t.frame.classList.remove('active');
-        t.tabEl.classList.remove('active');
+      if (!tabManager.hasTab(id)) return;
+
+      // Update TabManager state
+      tabManager.activateTab(id);
+
+      // Toggle DOM CSS classes
+      tabDom.forEach(function(dom) {
+        dom.frame.classList.remove('active');
+        dom.tabEl.classList.remove('active');
       });
-      tab.frame.classList.add('active');
-      tab.tabEl.classList.add('active');
-      activeTabId = id;
+      var dom = tabDom.get(id);
+      if (dom) {
+        dom.frame.classList.add('active');
+        dom.tabEl.classList.add('active');
+      }
       updateAll();
     }
 
     function getActiveTab() {
-      return activeTabId ? tabs.get(activeTabId) : null;
+      var active = tabManager.getActiveTab();
+      if (!active) return null;
+      return getFullTab(active.id);
     }
 
     // ---- UI updates ----
@@ -1109,7 +1180,7 @@
       if (!tab) { backBtn.disabled = true; fwdBtn.disabled = true; return; }
       var state = navState.get(tab.id);
       if (!state) { backBtn.disabled = true; fwdBtn.disabled = true; return; }
-      backBtn.disabled = !(state.depth > 0 || (state.openerId && tabs.has(state.openerId)));
+      backBtn.disabled = !(state.depth > 0 || (state.openerId && tabManager.hasTab(state.openerId)));
       fwdBtn.disabled = !(state.forwardDepth > 0);
     }
 
@@ -1198,7 +1269,7 @@
 
     function updateStatusBar() {
       var tab = getActiveTab();
-      var state = nightmareRuntime.getStatusBarState(tabs.size, tab ? tab.zone : undefined);
+      var state = nightmareRuntime.getStatusBarState(tabManager.getTabCount(), tab ? tab.zone : undefined);
       document.getElementById('nm-status-zone').textContent = state.zoneLabel ? 'Zone: ' + state.zoneLabel : 'Ready';
       document.getElementById('nm-status-node').textContent = 'Node ' + process.version;
       document.getElementById('nm-status-tabs').textContent = state.tabCount + ' tab' + (state.tabCount !== 1 ? 's' : '');
@@ -1228,7 +1299,7 @@
         state.forwardDepth++;
         try { tab.frame.contentWindow.history.back(); } catch(e) {}
         updateNavButtons();
-      } else if (state.openerId && tabs.has(state.openerId)) {
+      } else if (state.openerId && tabManager.hasTab(state.openerId)) {
         var oid = state.openerId;
         closeTab(tab.id);
         activateTab(oid);
@@ -1438,7 +1509,7 @@
       if (!tab) return;
 
       var navSt = navState.get(tab.id);
-      var canBack = navSt && (navSt.depth > 0 || (navSt.openerId && tabs.has(navSt.openerId)));
+      var canBack = navSt && (navSt.depth > 0 || (navSt.openerId && tabManager.hasTab(navSt.openerId)));
       var canFwd = navSt && navSt.forwardDepth > 0;
       var displayUrl = toDisplayUrl(tab.url);
 
@@ -1490,7 +1561,7 @@
     document.addEventListener('keydown', function(e) {
       var ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && e.key === 't') { e.preventDefault(); createTab(); }
-      if (ctrl && e.key === 'w') { e.preventDefault(); if (activeTabId) closeTab(activeTabId); }
+      if (ctrl && e.key === 'w') { e.preventDefault(); var activeW = tabManager.getActiveTab(); if (activeW) closeTab(activeW.id); }
       if (ctrl && e.key === 'l') { e.preventDefault(); var u = document.getElementById('nm-url-input'); u.focus(); u.select(); }
       if (ctrl && e.key === 'r') { e.preventDefault(); var t = getActiveTab(); if (t) { t.frame.src = t.url; } }
       if (ctrl && e.key === 'd') { e.preventDefault(); document.getElementById('nm-btn-bookmark').click(); }
@@ -1510,8 +1581,8 @@
       if (ctrl && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         var idx = parseInt(e.key, 10) - 1;
-        var tabIds = Array.from(tabs.keys());
-        if (idx < tabIds.length) activateTab(tabIds[idx]);
+        var allTabs = tabManager.getAllTabs();
+        if (idx < allTabs.length) activateTab(allTabs[idx].id);
       }
     });
 
@@ -1521,7 +1592,7 @@
       if (!tabEl) return;
       e.preventDefault();
       var tabId = tabEl.dataset.tabId;
-      var tab = tabs.get(tabId);
+      var tab = getFullTab(tabId);
       if (!tab) return;
 
       showContextMenu(e.clientX, e.clientY, [
@@ -1535,11 +1606,11 @@
         { separator: true },
         { label: 'Close Tab', action: function() { closeTab(tabId); } },
         { label: 'Close Other Tabs', action: function() {
-          var allIds = Array.from(tabs.keys());
+          var allIds = tabManager.getAllTabs().map(function(t) { return t.id; });
           allIds.forEach(function(tid) { if (tid !== tabId) closeTab(tid); });
         }},
         { label: 'Close Tabs to the Right', action: function() {
-          var allIds = Array.from(tabs.keys());
+          var allIds = tabManager.getAllTabs().map(function(t) { return t.id; });
           var startIdx = allIds.indexOf(tabId);
           for (var i = allIds.length - 1; i > startIdx; i--) closeTab(allIds[i]);
         }},
