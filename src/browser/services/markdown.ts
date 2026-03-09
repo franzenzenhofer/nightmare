@@ -63,7 +63,7 @@ function processLine(
   if (hMatch) {
     const level = hMatch[1]?.length ?? 1;
     const text = hMatch[2] ?? '';
-    html.push(`<h${level}>${inlineFormat(text)}</h${level}>`);
+    html.push(`<h${String(level)}>${inlineFormat(text)}</h${String(level)}>`);
     return;
   }
 

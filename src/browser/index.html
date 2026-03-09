@@ -754,8 +754,6 @@
       return securityZones.classify(getClassifiedUrl(url));
     }
 
-    var ZONE_COLORS = { LOCAL: '#4ade80', LOCALHOST: '#60a5fa', WEB: '#ff3333' };
-
     // ---- URL resolution ----
     function resolveUrl(input) {
       if (!input) return resolveUrl(HOME_URL);
@@ -1124,13 +1122,20 @@
       updateWindowTitle();
     }
 
+    var ZONE_DOT_HEX = { green: '#4ade80', blue: '#60a5fa', red: '#ff3333' };
+
     function updateNavBar() {
       var tab = getActiveTab();
       if (!tab) return;
-      var displayUrl = toDisplayUrl(tab.url);
-      document.getElementById('nm-url-input').value = displayUrl;
+      // Build a minimal Tab-compatible object for the TS component
+      var navBarTab = {
+        url: tab.url, title: tab.title, zone: tab.zone,
+        canGoBack: false, canGoForward: false, loading: false,
+      };
+      var state = nightmareRuntime.getNavBarState(navBarTab);
+      document.getElementById('nm-url-input').value = toDisplayUrl(tab.url);
       var dotEl = document.getElementById('nm-zone-dot');
-      var zoneColor = ZONE_COLORS[tab.zone] || '#585a64';
+      var zoneColor = ZONE_DOT_HEX[state.zoneDot] || '#585a64';
       dotEl.style.background = zoneColor;
       dotEl.style.boxShadow = '0 0 6px ' + zoneColor;
       // SSL indicator: lock for https
@@ -1193,15 +1198,16 @@
 
     function updateStatusBar() {
       var tab = getActiveTab();
-      document.getElementById('nm-status-zone').textContent = tab ? 'Zone: ' + tab.zone : 'Ready';
+      var state = nightmareRuntime.getStatusBarState(tabs.size, tab ? tab.zone : undefined);
+      document.getElementById('nm-status-zone').textContent = state.zoneLabel ? 'Zone: ' + state.zoneLabel : 'Ready';
       document.getElementById('nm-status-node').textContent = 'Node ' + process.version;
-      document.getElementById('nm-status-tabs').textContent = tabs.size + ' tab' + (tabs.size !== 1 ? 's' : '');
+      document.getElementById('nm-status-tabs').textContent = state.tabCount + ' tab' + (state.tabCount !== 1 ? 's' : '');
       document.getElementById('nm-status-port').textContent = 'API :' + API_PORT;
     }
 
     function updateWindowTitle() {
       var tab = getActiveTab();
-      var title = tab && tab.title ? tab.title + ' - Nightmare Browser' : 'Nightmare Browser';
+      var title = nightmareRuntime.getWindowTitle(tab || undefined);
       document.getElementById('nm-window-title').textContent = title;
       document.title = title;
     }
