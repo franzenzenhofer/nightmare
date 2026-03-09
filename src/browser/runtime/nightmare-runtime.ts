@@ -81,9 +81,15 @@ import { registerAllRoutes } from '../api/route-definitions';
 // === Orchestrator ===
 import { BrowserOrchestrator } from '../browser-orchestrator';
 
+// === Browser Init ===
+import { initBrowser } from './browser-init';
+
 declare global {
   interface Window {
     Nightmare?: {
+      // Browser Init
+      initBrowser: typeof initBrowser;
+
       // Services
       SecurityZones: typeof SecurityZones;
       JsonStorage: typeof JsonStorage;
@@ -234,6 +240,9 @@ declare global {
 
 window.Nightmare = {
   ...(window.Nightmare ?? {}),
+
+  // Browser Init
+  initBrowser,
 
   // Services
   SecurityZones,

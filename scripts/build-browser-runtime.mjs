@@ -19,7 +19,7 @@ await build({
   sourcemap: true,
   logLevel: 'info',
   legalComments: 'none',
-  external: ['fs', 'path', 'os', 'url', 'http'],
+  external: ['fs', 'path', 'os', 'url', 'http', 'https', 'nw.gui'],
   banner: {
     js: '/* NW.js runtime: Node.js built-ins available via require() */',
   },
