@@ -1,8 +1,7 @@
-import { resolve, dirname, basename } from 'path';
+import { resolve, basename } from 'path';
 import { homedir } from 'os';
-import { fileURLToPath } from 'url';
 
-const PAGES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../pages');
+const PAGES_DIR = resolve(process.cwd(), 'pages');
 
 const PORT_PATTERN = /^\d{2,5}$/;
 const PROTOCOL_PATTERN = /^(https?|file|nightmare):\/\//;
