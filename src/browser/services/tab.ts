@@ -19,7 +19,11 @@ export interface Tab {
 
 const securityZones = new SecurityZones();
 
-export function createTab(url: string = 'nightmare://newtab', openerId?: string): Tab {
+export function createTab(
+  url: string = 'nightmare://newtab',
+  openerId?: string,
+  displayUrl?: string,
+): Tab {
   const id = crypto.randomUUID();
   return {
     id,
@@ -29,7 +33,7 @@ export function createTab(url: string = 'nightmare://newtab', openerId?: string)
     loading: true,
     canGoBack: false,
     canGoForward: false,
-    zone: securityZones.classify(url),
+    zone: securityZones.classify(displayUrl ?? url),
     webviewId: `webview-${id}`,
     openerId,
     muted: false,

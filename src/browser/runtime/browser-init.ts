@@ -224,7 +224,8 @@ export function initBrowser(): void {
 
   function createTab(url?: string, openerId?: string): FullTab {
     const resolved = resolveUrl(url ?? HOME_URL);
-    const tab = tabManager.createTab(resolved, openerId);
+    const displayResolved = toDisplayUrl(resolved);
+    const tab = tabManager.createTab(resolved, openerId, displayResolved);
     const id = tab.id;
 
     navState.set(id, {

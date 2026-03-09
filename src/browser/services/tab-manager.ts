@@ -7,8 +7,8 @@ export class TabManager {
   private activeTabId: string | null = null;
   private readonly securityZones = new SecurityZones();
 
-  createTab(url?: string, openerId?: string): Tab {
-    const tab = createTab(url, openerId);
+  createTab(url?: string, openerId?: string, displayUrl?: string): Tab {
+    const tab = createTab(url, openerId, displayUrl);
     this.tabs.set(tab.id, tab);
     this.activeTabId = tab.id;
     return tab;
@@ -53,12 +53,16 @@ export class TabManager {
     }
   }
 
-  updateTabFromWebview(id: string, updates: Partial<Tab>): void {
+  updateTabFromWebview(
+    id: string,
+    updates: Partial<Tab>,
+    displayUrl?: string,
+  ): void {
     const tab = this.tabs.get(id);
     if (!tab) return;
     Object.assign(tab, updates);
     if (updates.url !== undefined) {
-      tab.zone = this.securityZones.classify(updates.url);
+      tab.zone = this.securityZones.classify(displayUrl ?? updates.url);
     }
   }
 

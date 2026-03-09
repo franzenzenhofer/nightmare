@@ -125,9 +125,10 @@ export function navigateTabDom(
   deps: BrowserDeps,
 ): void {
   const oldZone = tab.zone;
-  const newZone = deps.securityZones.classify(deps.toDisplayUrl(newUrl));
+  const displayNewUrl = deps.toDisplayUrl(newUrl);
+  const newZone = deps.securityZones.classify(displayNewUrl);
 
-  deps.tabManager.updateTabFromWebview(tab.id, { url: newUrl });
+  deps.tabManager.updateTabFromWebview(tab.id, { url: newUrl }, displayNewUrl);
 
   const dom = deps.tabDom.get(tab.id);
   if (!dom) return;

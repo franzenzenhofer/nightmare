@@ -28,12 +28,17 @@ export function attachFrameListeners(
       newUrl = data.url;
     }
 
-    deps.tabManager.updateTabFromWebview(tabId, {
-      title: newTitle,
-      url: newUrl || data.url,
-      favicon: newFavicon,
-      loading: false,
-    });
+    const effectiveUrl = newUrl || data.url;
+    deps.tabManager.updateTabFromWebview(
+      tabId,
+      {
+        title: newTitle,
+        url: effectiveUrl,
+        favicon: newFavicon,
+        loading: false,
+      },
+      deps.toDisplayUrl(effectiveUrl),
+    );
 
     const dom = deps.tabDom.get(tabId);
     if (dom) {

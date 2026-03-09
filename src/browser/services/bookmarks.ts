@@ -94,7 +94,30 @@ export class BookmarkManager {
   }
 
   private loadData(): BookmarkData {
-    return this.storage.load({ bookmarks: [], folders: [] });
+    const raw = this.storage.load({ bookmarks: [], folders: [] });
+    if (Array.isArray(raw)) {
+      const entries = raw as Array<Record<string, unknown>>;
+      const migrated: BookmarkData = {
+        bookmarks: entries.map(
+          (entry, index) => ({
+            id: crypto.randomUUID(),
+            title: typeof entry['title'] === 'string' ? entry['title'] : '',
+            url: typeof entry['url'] === 'string' ? entry['url'] : '',
+            favicon: null,
+            folderId: null,
+            createdAt:
+              typeof entry['createdAt'] === 'number'
+                ? entry['createdAt']
+                : Date.now(),
+            position: index,
+          }),
+        ),
+        folders: [],
+      };
+      this.saveData(migrated);
+      return migrated;
+    }
+    return raw;
   }
 
   private saveData(data: BookmarkData): void {
