@@ -1557,33 +1557,45 @@
       showContextMenu(e.clientX, e.clientY, menuItems);
     });
 
-    // ---- Keyboard shortcuts ----
+    // ---- Keyboard shortcuts (via TS KeyboardShortcuts service) ----
+    var shortcuts = new nightmareRuntime.KeyboardShortcuts();
+    shortcuts.register('ctrl+t', 'New Tab', function() { createTab(); });
+    shortcuts.register('ctrl+w', 'Close Tab', function() { var a = tabManager.getActiveTab(); if (a) closeTab(a.id); });
+    shortcuts.register('ctrl+l', 'Focus URL Bar', function() { var u = document.getElementById('nm-url-input'); u.focus(); u.select(); });
+    shortcuts.register('ctrl+r', 'Reload Tab', function() { var t = getActiveTab(); if (t) { t.frame.src = t.url; } });
+    shortcuts.register('ctrl+d', 'Bookmark Page', function() { document.getElementById('nm-btn-bookmark').click(); });
+    shortcuts.register('ctrl+f', 'Find in Page', function() { toggleFindBar(); });
+    shortcuts.register('ctrl+h', 'History', function() { createTab('nightmare://history'); });
+    shortcuts.register('ctrl+shift+B', 'Bookmarks Page', function() { createTab('nightmare://bookmarks'); });
+    shortcuts.register('ctrl+,', 'Settings', function() { createTab('nightmare://settings'); });
+    shortcuts.register('F5', 'Reload (F5)', function() { var t = getActiveTab(); if (t) { t.frame.src = t.url; } });
+    shortcuts.register('F12', 'DevTools', function() { if (win) win.showDevTools(); });
+    shortcuts.register('Escape', 'Dismiss Overlays', function() {
+      var fb = document.getElementById('nm-find-bar');
+      if (fb) { fb.remove(); findBarVisible = false; clearFindHighlights(); }
+      var cm = document.getElementById('nm-context-menu');
+      if (cm) cm.remove();
+    });
+    // Tab switching with Ctrl+1-9
+    for (var si = 1; si <= 9; si++) {
+      (function(idx) {
+        shortcuts.register('ctrl+' + idx, 'Switch to Tab ' + idx, function() {
+          var allTabs = tabManager.getAllTabs();
+          if (idx - 1 < allTabs.length) activateTab(allTabs[idx - 1].id);
+        });
+      })(si);
+    }
+
     document.addEventListener('keydown', function(e) {
-      var ctrl = e.ctrlKey || e.metaKey;
-      if (ctrl && e.key === 't') { e.preventDefault(); createTab(); }
-      if (ctrl && e.key === 'w') { e.preventDefault(); var activeW = tabManager.getActiveTab(); if (activeW) closeTab(activeW.id); }
-      if (ctrl && e.key === 'l') { e.preventDefault(); var u = document.getElementById('nm-url-input'); u.focus(); u.select(); }
-      if (ctrl && e.key === 'r') { e.preventDefault(); var t = getActiveTab(); if (t) { t.frame.src = t.url; } }
-      if (ctrl && e.key === 'd') { e.preventDefault(); document.getElementById('nm-btn-bookmark').click(); }
-      if (ctrl && e.key === 'f') { e.preventDefault(); toggleFindBar(); }
-      if (ctrl && e.key === 'h') { e.preventDefault(); createTab('nightmare://history'); }
-      if (ctrl && e.shiftKey && e.key === 'B') { e.preventDefault(); createTab('nightmare://bookmarks'); }
-      if (ctrl && e.key === ',') { e.preventDefault(); createTab('nightmare://settings'); }
-      if (e.key === 'F5') { e.preventDefault(); var t2 = getActiveTab(); if (t2) { t2.frame.src = t2.url; } }
-      if (e.key === 'F12') { e.preventDefault(); if (win) win.showDevTools(); }
-      if (e.key === 'Escape') {
-        var fb = document.getElementById('nm-find-bar');
-        if (fb) { fb.remove(); findBarVisible = false; clearFindHighlights(); }
-        var cm = document.getElementById('nm-context-menu');
-        if (cm) cm.remove();
-      }
-      // Tab switching with Ctrl+1-9
-      if (ctrl && e.key >= '1' && e.key <= '9') {
-        e.preventDefault();
-        var idx = parseInt(e.key, 10) - 1;
-        var allTabs = tabManager.getAllTabs();
-        if (idx < allTabs.length) activateTab(allTabs[idx].id);
-      }
+      // Normalize: treat metaKey (Cmd on macOS) as ctrl for shortcut matching
+      var handled = shortcuts.handleKeyEvent({
+        key: e.key,
+        ctrl: e.ctrlKey || e.metaKey,
+        alt: e.altKey,
+        shift: e.shiftKey,
+        meta: false
+      });
+      if (handled) { e.preventDefault(); e.stopPropagation(); }
     });
 
     // ---- Tab context menu ----
