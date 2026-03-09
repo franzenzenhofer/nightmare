@@ -14,8 +14,14 @@
   /* ---- Accent: Stranger Things neon red ---- */
   --nm-accent: #ff1515;
   --nm-accent-dim: #8b0a0a;
-  --nm-accent-glow: rgba(255, 21, 21, 0.25);
+  --nm-accent-glow: rgba(255, 21, 21, 0.35);
   --nm-accent-bright: #ff3333;
+  --nm-line-red: #ff1515;
+  --nm-line-red-dim: #cc0000;
+  --nm-glow-soft: rgba(255, 21, 21, 0.4);
+  --nm-glow-med: rgba(255, 21, 21, 0.6);
+  --nm-glow-hot: rgba(255, 21, 21, 0.8);
+  --nm-glow-ambient: rgba(255, 0, 0, 0.15);
 
   /* ---- Security Zones: ALL red-based, varying intensity ---- */
   --nm-zone-local-bg: #150808;

@@ -32,26 +32,25 @@ export class SecurityZones {
       case 'LOCAL':
         return {
           type: 'info',
-          color: 'green',
-          icon: '🟢',
-          message: 'LOCAL FILE — Full Node.js access, no restrictions.',
+          color: 'red',
+          icon: '[!]',
+          message: 'LOCAL — Node.js ENABLED. Full filesystem access. No sandbox.',
           dismissable: true,
         };
       case 'LOCALHOST':
         return {
           type: 'info',
-          color: 'blue',
-          icon: 'ℹ️',
-          message: 'LOCALHOST — Node.js enabled, no CORS restrictions.',
+          color: 'red',
+          icon: '[!]',
+          message: 'LOCALHOST — Node.js ENABLED. No CORS. No sandbox.',
           dismissable: true,
         };
       case 'WEB':
         return {
           type: 'warning',
           color: 'red',
-          icon: '⚠️',
-          message:
-            'OPEN WEB — You are browsing with ALL security disabled. Passwords, cookies, and data are NOT protected.',
+          icon: '[!!!]',
+          message: 'OPEN WEB — No Node.js. ALL security disabled. Passwords and data NOT protected.',
           dismissable: false,
         };
     }

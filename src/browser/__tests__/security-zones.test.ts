@@ -127,16 +127,16 @@ describe('SecurityZones', () => {
   });
 
   describe('getBanner', () => {
-    it('returns green dismissable banner for LOCAL', () => {
+    it('returns red dismissable banner for LOCAL', () => {
       const banner = zones.getBanner('LOCAL');
-      expect(banner.color).toBe('green');
+      expect(banner.color).toBe('red');
       expect(banner.dismissable).toBe(true);
       expect(banner.type).toBe('info');
     });
 
-    it('returns blue dismissable banner for LOCALHOST', () => {
+    it('returns red dismissable banner for LOCALHOST', () => {
       const banner = zones.getBanner('LOCALHOST');
-      expect(banner.color).toBe('blue');
+      expect(banner.color).toBe('red');
       expect(banner.dismissable).toBe(true);
       expect(banner.type).toBe('info');
     });

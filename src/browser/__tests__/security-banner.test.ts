@@ -12,12 +12,12 @@ describe('SecurityBannerLogic', () => {
   it('shows banner for LOCAL zone', () => {
     const config = banner.getBannerState('tab1', 'LOCAL');
     expect(config).not.toBeNull();
-    expect(config?.color).toBe('green');
+    expect(config?.color).toBe('red');
   });
 
   it('shows banner for LOCALHOST zone', () => {
     const config = banner.getBannerState('tab1', 'LOCALHOST');
-    expect(config?.color).toBe('blue');
+    expect(config?.color).toBe('red');
   });
 
   it('shows banner for WEB zone', () => {
