@@ -103,53 +103,41 @@
     var _dataDir = path.join(os.homedir(), '.nightmare-browser');
     if (!fs.existsSync(_dataDir)) fs.mkdirSync(_dataDir, { recursive: true });
 
-    function loadJsonFile(name) {
-      try { return JSON.parse(fs.readFileSync(path.join(_dataDir, name), 'utf8')); }
-      catch(e) { return []; }
-    }
-    function saveJsonFile(name, data) {
-      fs.writeFileSync(path.join(_dataDir, name), JSON.stringify(data, null, 2), 'utf8');
-    }
-
-    // ---- Persistent bookmarks ----
-    var userBookmarks = loadJsonFile('bookmarks.json');
+    // ---- Persistent bookmarks (via TS BookmarkManager) ----
+    var bookmarkManager = new nightmareRuntime.BookmarkManager(_dataDir);
 
     function isBookmarked(url) {
       var display = toDisplayUrl(url);
-      return userBookmarks.some(function(b) { return b.url === url || b.url === display; });
+      var all = bookmarkManager.getAll();
+      return all.some(function(b) { return b.url === url || b.url === display; });
     }
     function addBookmark(url, title) {
       if (isBookmarked(url)) return;
       var display = toDisplayUrl(url);
-      userBookmarks.push({ title: title || display, url: display, createdAt: new Date().toISOString() });
-      saveJsonFile('bookmarks.json', userBookmarks);
+      bookmarkManager.add(title || display, display);
       updateBookmarkButton();
       renderBookmarks();
     }
     function removeBookmark(url) {
       var display = toDisplayUrl(url);
-      userBookmarks = userBookmarks.filter(function(b) { return b.url !== url && b.url !== display; });
-      saveJsonFile('bookmarks.json', userBookmarks);
+      var all = bookmarkManager.getAll();
+      var match = all.find(function(b) { return b.url === url || b.url === display; });
+      if (match) bookmarkManager.remove(match.id);
       updateBookmarkButton();
       renderBookmarks();
     }
 
-    // ---- Persistent history ----
-    var browsingHistory = loadJsonFile('history.json');
+    // ---- Persistent history (via TS HistoryManager) ----
+    var historyManager = new nightmareRuntime.HistoryManager(_dataDir, 5000);
 
     function recordHistory(url, title) {
       var display = toDisplayUrl(url);
-      // Skip internal pages and empty URLs
       if (!url || url === 'about:blank') return;
-      browsingHistory.unshift({ url: display, title: title || display, visitedAt: new Date().toISOString(), displayUrl: display });
-      // Cap at 5000
-      if (browsingHistory.length > 5000) browsingHistory = browsingHistory.slice(0, 5000);
-      saveJsonFile('history.json', browsingHistory);
+      historyManager.addVisit(display, title || display);
     }
 
-    // ---- Settings ----
-    var userSettings = {};
-    try { userSettings = JSON.parse(fs.readFileSync(path.join(_dataDir, 'settings.json'), 'utf8')); } catch(e) {}
+    // ---- Settings (via TS SettingsManager) ----
+    var settingsManager = new nightmareRuntime.SettingsManager(_dataDir);
 
     // NW.js inline scripts don't have __dirname — derive paths from process.cwd()
     var _srcDir = process.cwd();
@@ -209,91 +197,9 @@
 
     var serveMimeType = nightmareRuntime.getMimeType;
 
-    // ---- Minimal Markdown to HTML renderer ----
-    function renderMarkdown(md) {
-      var lines = md.split('\n');
-      var html = [];
-      var inCode = false;
-      var inList = false;
-      var listType = '';
-
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-
-        // Fenced code blocks
-        if (line.trim().startsWith('```')) {
-          if (inCode) { html.push('</code></pre>'); inCode = false; }
-          else { html.push('<pre><code>'); inCode = true; }
-          continue;
-        }
-        if (inCode) { html.push(escapeHtml(line) + '\n'); continue; }
-
-        // Close list if non-list line
-        if (inList && !line.match(/^\s*[-*+]\s/) && !line.match(/^\s*\d+\.\s/) && line.trim() !== '') {
-          html.push(listType === 'ul' ? '</ul>' : '</ol>');
-          inList = false;
-        }
-
-        // Headings
-        var hMatch = line.match(/^(#{1,6})\s+(.*)$/);
-        if (hMatch) { var lv = hMatch[1].length; html.push('<h' + lv + '>' + inlineFormat(hMatch[2]) + '</h' + lv + '>'); continue; }
-
-        // HR
-        if (/^(-{3,}|_{3,}|\*{3,})\s*$/.test(line.trim())) { html.push('<hr>'); continue; }
-
-        // Blockquote
-        if (line.startsWith('> ')) { html.push('<blockquote>' + inlineFormat(line.slice(2)) + '</blockquote>'); continue; }
-
-        // Unordered list
-        var ulMatch = line.match(/^\s*[-*+]\s+(.*)$/);
-        if (ulMatch) {
-          if (!inList || listType !== 'ul') { if (inList) html.push('</ol>'); html.push('<ul>'); inList = true; listType = 'ul'; }
-          html.push('<li>' + inlineFormat(ulMatch[1]) + '</li>');
-          continue;
-        }
-
-        // Ordered list
-        var olMatch = line.match(/^\s*\d+\.\s+(.*)$/);
-        if (olMatch) {
-          if (!inList || listType !== 'ol') { if (inList) html.push('</ul>'); html.push('<ol>'); inList = true; listType = 'ol'; }
-          html.push('<li>' + inlineFormat(olMatch[1]) + '</li>');
-          continue;
-        }
-
-        // Empty line = paragraph break
-        if (line.trim() === '') { html.push('<br>'); continue; }
-
-        // Regular paragraph
-        html.push('<p>' + inlineFormat(line) + '</p>');
-      }
-
-      if (inCode) html.push('</code></pre>');
-      if (inList) html.push(listType === 'ul' ? '</ul>' : '</ol>');
-      return html.join('\n');
-    }
-
-    function escapeHtml(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    function inlineFormat(s) {
-      s = escapeHtml(s);
-      // Images
-      s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
-      // Links
-      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-      // Bold
-      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-      // Italic
-      s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
-      // Inline code
-      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-      // Strikethrough
-      s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
-      return s;
-    }
+    // ---- Markdown renderer (delegated to TS service) ----
+    var renderMarkdown = nightmareRuntime.renderMarkdown;
+    var escapeHtml = nightmareRuntime.markdownEscapeHtml;
 
     var server = http.createServer(function(req, res) {
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -723,7 +629,7 @@
       // ---- Bookmarks API ----
       if (url === '/api/bookmarks' && req.method === 'GET') {
         res.writeHead(200);
-        res.end(JSON.stringify(userBookmarks));
+        res.end(JSON.stringify(bookmarkManager.getAll()));
         return;
       }
       if (url === '/api/bookmarks' && req.method === 'POST') {
@@ -742,7 +648,7 @@
       // ---- History API ----
       if (url === '/api/history' && req.method === 'GET') {
         res.writeHead(200);
-        res.end(JSON.stringify(browsingHistory.slice(0, 100)));
+        res.end(JSON.stringify(historyManager.getRecent(100)));
         return;
       }
 
@@ -901,7 +807,7 @@
       { title: 'File Browser', url: 'nightmare://file-browser' },
     ];
     function getBarBookmarks() {
-      return DEFAULT_BOOKMARKS.concat(userBookmarks.slice(-10));
+      return DEFAULT_BOOKMARKS.concat(bookmarkManager.getBarBookmarks().slice(-10));
     }
 
     // ---- Navigate a tab (recreates iframe if zone changes) ----

@@ -52,6 +52,7 @@ import { exportToJson as exportBookmarksToJson, importFromJson as importBookmark
 import { escapeHtml as escapeBookmarkHtml, decodeHtmlEntities, renderFolder as renderBookmarkFolder, parseHtmlLines } from '../services/bookmark-io-html';
 import { classifyTag, convertPathToOpenApi, buildPathParams, buildRequestBody, buildOperation, collectTags, generateOpenApiSpec } from '../services/openapi-spec';
 import { ROUTE_METADATA } from '../services/openapi-routes';
+import { escapeHtml as markdownEscapeHtml, inlineFormat as markdownInlineFormat, renderMarkdown } from '../services/markdown';
 
 // === Components ===
 import { SecurityBannerLogic } from '../components/security-banner';
@@ -191,6 +192,9 @@ declare global {
       collectTags: typeof collectTags;
       generateOpenApiSpec: typeof generateOpenApiSpec;
       ROUTE_METADATA: typeof ROUTE_METADATA;
+      markdownEscapeHtml: typeof markdownEscapeHtml;
+      markdownInlineFormat: typeof markdownInlineFormat;
+      renderMarkdown: typeof renderMarkdown;
 
       // Components
       SecurityBannerLogic: typeof SecurityBannerLogic;
@@ -339,6 +343,9 @@ window.Nightmare = {
   collectTags,
   generateOpenApiSpec,
   ROUTE_METADATA,
+  markdownEscapeHtml,
+  markdownInlineFormat,
+  renderMarkdown,
 
   // Components
   SecurityBannerLogic,
