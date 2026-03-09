@@ -110,7 +110,7 @@
 
     var API_PORT = parseInt(process.env.NIGHTMARE_API_PORT || '6660', 10);
     var navState = new Map(); // tabId -> { depth, forwardDepth, openerId, lastUrl, isBackForward }
-    var findBarVisible = false;
+    var findBarLogic = new nightmareRuntime.FindBarLogic();
 
     // ---- Persistent data directory ----
     var _dataDir = path.join(os.homedir(), '.nightmare-browser');
@@ -1379,15 +1379,17 @@
       }
     }
 
-    // ---- Find in page ----
+    // ---- Find in page (state tracked via TS FindBarLogic) ----
+    function closeFindBar() {
+      var bar = document.getElementById('nm-find-bar');
+      if (bar) bar.remove();
+      findBarLogic.close();
+      clearFindHighlights();
+    }
+
     function toggleFindBar() {
-      var existing = document.getElementById('nm-find-bar');
-      if (existing) {
-        existing.remove();
-        findBarVisible = false;
-        return;
-      }
-      findBarVisible = true;
+      if (findBarLogic.getState().isOpen) { closeFindBar(); return; }
+      findBarLogic.open();
       var bar = document.createElement('div');
       bar.id = 'nm-find-bar';
       bar.style.cssText = 'position:fixed;top:80px;right:20px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:8px 12px;z-index:9999;display:flex;gap:8px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
@@ -1405,7 +1407,7 @@
       var closeBtn = document.createElement('button');
       closeBtn.textContent = '\u2715';
       closeBtn.style.cssText = 'background:none;border:none;color:#585a64;cursor:pointer;font-size:14px;padding:2px 6px;';
-      closeBtn.addEventListener('click', function() { bar.remove(); findBarVisible = false; clearFindHighlights(); });
+      closeBtn.addEventListener('click', function() { closeFindBar(); });
       bar.appendChild(closeBtn);
 
       document.body.appendChild(bar);
@@ -1415,31 +1417,34 @@
       input.addEventListener('input', function() {
         clearTimeout(searchTimer);
         var q = input.value;
+        findBarLogic.setQuery(q);
         searchTimer = setTimeout(function() { doFind(q, countSpan); }, 150);
       });
       input.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') { bar.remove(); findBarVisible = false; clearFindHighlights(); }
-        if (e.key === 'Enter') { doFind(input.value, countSpan); }
+        if (e.key === 'Escape') { closeFindBar(); }
+        if (e.key === 'Enter') { findBarLogic.nextMatch(); doFind(input.value, countSpan); }
       });
     }
 
     function doFind(query, countEl) {
       clearFindHighlights();
-      if (!query) { countEl.textContent = ''; return; }
+      if (!query) { findBarLogic.setMatches(0); countEl.textContent = ''; return; }
       var tab = getActiveTab();
       if (!tab) return;
       try {
         var frameWin = tab.frame.contentWindow;
-        // Use native window.find for highlight
         var found = frameWin.find(query, false, false, true, false, false, false);
         if (found) {
+          findBarLogic.setMatches(1);
           countEl.textContent = 'Found';
           countEl.style.color = '#4ade80';
         } else {
+          findBarLogic.setMatches(0);
           countEl.textContent = 'No match';
           countEl.style.color = '#ff4444';
         }
       } catch(e) {
+        findBarLogic.setMatches(0);
         countEl.textContent = 'Error';
         countEl.style.color = '#ff4444';
       }
@@ -1571,8 +1576,7 @@
     shortcuts.register('F5', 'Reload (F5)', function() { var t = getActiveTab(); if (t) { t.frame.src = t.url; } });
     shortcuts.register('F12', 'DevTools', function() { if (win) win.showDevTools(); });
     shortcuts.register('Escape', 'Dismiss Overlays', function() {
-      var fb = document.getElementById('nm-find-bar');
-      if (fb) { fb.remove(); findBarVisible = false; clearFindHighlights(); }
+      closeFindBar();
       var cm = document.getElementById('nm-context-menu');
       if (cm) cm.remove();
     });
