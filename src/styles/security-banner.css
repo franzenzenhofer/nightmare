@@ -21,25 +21,25 @@
   display: flex;
 }
 
-/* ---- LOCAL zone: calm green ---- */
+/* ---- LOCAL zone: dim red (less dangerous) ---- */
 #nm-security-banner.zone-local {
   background: var(--nm-zone-local-bg);
   color: var(--nm-zone-local-fg);
   border-color: var(--nm-zone-local-border);
 }
 
-/* ---- LOCALHOST zone: calm blue ---- */
+/* ---- LOCALHOST zone: warm red (moderate danger) ---- */
 #nm-security-banner.zone-localhost {
   background: var(--nm-zone-localhost-bg);
   color: var(--nm-zone-localhost-fg);
   border-color: var(--nm-zone-localhost-border);
 }
 
-/* ---- WEB zone: NIGHTMARE DANGER ---- */
+/* ---- WEB zone: FULL NIGHTMARE DANGER ---- */
 #nm-security-banner.zone-web {
   background: #1a0000;
-  color: #ff2222;
-  border-color: #ff0000;
+  color: var(--nm-accent);
+  border-color: var(--nm-accent);
   border-bottom-width: 2px;
   text-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
   animation: webBannerFlash 0.4s ease-in-out 8;
@@ -69,7 +69,7 @@
   position: absolute;
   left: 0; right: 0; bottom: -2px;
   height: 2px;
-  background: #ff0000;
+  background: var(--nm-accent);
   box-shadow: 0 0 12px 3px rgba(255, 0, 0, 0.6), 0 0 30px 6px rgba(255, 0, 0, 0.3);
   animation: borderPulse 1.5s ease-in-out infinite;
   pointer-events: none;
@@ -145,7 +145,7 @@
   flex-shrink: 0;
   position: relative;
   z-index: 1;
-  color: #ff4444;
+  color: var(--nm-accent);
   border: 1px solid rgba(255, 0, 0, 0.4);
   padding: 2px 8px;
   border-radius: 2px;

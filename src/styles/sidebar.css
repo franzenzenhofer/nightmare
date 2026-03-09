@@ -41,7 +41,7 @@
 
 #nm-sidebar-header .nm-sidebar-close:hover {
   background: var(--nm-bg-hover);
-  color: var(--nm-text-primary);
+  color: var(--nm-accent);
 }
 
 #nm-sidebar-content {
@@ -59,12 +59,12 @@
 }
 
 #nm-sidebar-content::-webkit-scrollbar-thumb {
-  background: var(--nm-bg-hover);
+  background: var(--nm-accent-dim);
   border-radius: 3px;
 }
 
 #nm-sidebar-content::-webkit-scrollbar-thumb:hover {
-  background: var(--nm-bg-active);
+  background: var(--nm-tab-border);
 }
 
 #nm-sidebar-resize {

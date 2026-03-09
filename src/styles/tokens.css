@@ -1,29 +1,29 @@
 :root {
-  /* ---- Stranger Things: void black + deep navy + neon red ---- */
-  --nm-bg-primary: #03030a;
-  --nm-bg-secondary: #08091a;
-  --nm-bg-tertiary: #0d0f24;
-  --nm-bg-hover: #151838;
-  --nm-bg-active: #1a1e42;
-  --nm-bg-input: #050614;
-  --nm-tab-bg: #050614;
-  --nm-tab-active-bg: #0d0f24;
-  --nm-tab-hover-bg: #0a0c1e;
-  --nm-tab-border: #1a1d3a;
+  /* ---- Stranger Things: pure black void + neon red everything ---- */
+  --nm-bg-primary: #050505;
+  --nm-bg-secondary: #0a0808;
+  --nm-bg-tertiary: #120c0c;
+  --nm-bg-hover: #1a0e0e;
+  --nm-bg-active: #241414;
+  --nm-bg-input: #080505;
+  --nm-tab-bg: #080505;
+  --nm-tab-active-bg: #120c0c;
+  --nm-tab-hover-bg: #0e0808;
+  --nm-tab-border: #4a0000;
 
   /* ---- Accent: Stranger Things neon red ---- */
   --nm-accent: #ff1515;
   --nm-accent-dim: #8b0a0a;
-  --nm-accent-glow: rgba(255, 21, 21, 0.2);
+  --nm-accent-glow: rgba(255, 21, 21, 0.25);
   --nm-accent-bright: #ff3333;
 
-  /* ---- Security Zones ---- */
-  --nm-zone-local-bg: #061a0e;
-  --nm-zone-local-fg: #4ade80;
-  --nm-zone-local-border: #166534;
-  --nm-zone-localhost-bg: #060d28;
-  --nm-zone-localhost-fg: #3a5fe5;
-  --nm-zone-localhost-border: #1e2f6f;
+  /* ---- Security Zones: ALL red-based, varying intensity ---- */
+  --nm-zone-local-bg: #150808;
+  --nm-zone-local-fg: #cc6644;
+  --nm-zone-local-border: #5a2200;
+  --nm-zone-localhost-bg: #120808;
+  --nm-zone-localhost-fg: #dd7744;
+  --nm-zone-localhost-border: #6a2800;
   --nm-zone-web-bg: #2a0505;
   --nm-zone-web-fg: #ff1515;
   --nm-zone-web-border: #cc0000;
@@ -31,11 +31,11 @@
 
   /* ---- Text: cold white on void ---- */
   --nm-text-primary: #e8e6e3;
-  --nm-text-secondary: #8a8da0;
-  --nm-text-muted: #484b62;
+  --nm-text-secondary: #8a7a7a;
+  --nm-text-muted: #5a4444;
   --nm-text-url: #e8e6e3;
   --nm-text-url-host: #ffffff;
-  --nm-text-url-path: #8a8da0;
+  --nm-text-url-path: #8a7a7a;
 
   /* ---- Fonts: monospace only, no external fonts ---- */
   --nm-font-ui: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;

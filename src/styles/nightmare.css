@@ -16,12 +16,12 @@ html, body {
 #nm-browser {
   display: flex; flex-direction: column;
   height: 100vh; width: 100vw;
-  border: 1px solid #1a1d3a;
-  box-shadow: inset 0 0 80px rgba(10, 12, 40, 0.8), 0 0 1px rgba(255, 21, 21, 0.3);
+  border: 1px solid var(--nm-tab-border);
+  box-shadow: inset 0 0 60px rgba(40, 0, 0, 0.5), 0 0 2px rgba(255, 21, 21, 0.4);
   overflow: hidden;
 }
 
-/* ---- Titlebar ---- */
+/* ---- Titlebar: Stranger Things red line treatment ---- */
 #nm-titlebar {
   display: flex; align-items: center;
   height: var(--nm-titlebar-h);
@@ -30,16 +30,37 @@ html, body {
   background: var(--nm-bg-primary);
   -webkit-app-region: drag;
   padding: 0 var(--nm-space-2);
-  border-bottom: 1px solid #0f1118;
+  border-bottom: 1px solid var(--nm-tab-border);
+  position: relative;
+}
+
+/* Stranger Things signature red line ABOVE title */
+#nm-titlebar::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #cc0000, #ff1515, #cc0000, transparent);
+  box-shadow: 0 0 6px rgba(255, 21, 21, 0.4);
+}
+
+/* Stranger Things signature red line BELOW title */
+#nm-titlebar::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #cc0000, #ff1515, #cc0000, transparent);
+  box-shadow: 0 0 6px rgba(255, 21, 21, 0.4);
 }
 
 #nm-titlebar .nm-title {
   flex: 1; font-size: var(--nm-text-sm);
   color: var(--nm-accent);
   text-align: center;
-  letter-spacing: 3px;
+  letter-spacing: 4px;
   text-transform: uppercase;
-  text-shadow: 0 0 10px rgba(255, 21, 21, 0.6), 0 0 20px rgba(255, 21, 21, 0.3);
+  text-shadow: 0 0 10px rgba(255, 21, 21, 0.7), 0 0 25px rgba(255, 21, 21, 0.3), 0 0 40px rgba(255, 0, 0, 0.15);
   font-family: var(--nm-font-mono);
   font-weight: 700;
   white-space: nowrap;
@@ -64,13 +85,13 @@ html, body {
 
 #nm-titlebar .nm-window-controls button:hover {
   background: var(--nm-bg-hover);
-  color: var(--nm-text-primary);
+  color: var(--nm-accent);
 }
 
 #nm-titlebar .nm-window-controls button#nm-btn-close:hover {
   background: var(--nm-accent);
   color: white;
-  box-shadow: 0 0 8px rgba(255, 21, 21, 0.5);
+  box-shadow: 0 0 10px rgba(255, 21, 21, 0.6);
 }
 
 /* ---- Tab bar ---- */
@@ -108,7 +129,7 @@ html, body {
 #nm-nav-bar button:hover:not(:disabled) {
   background: var(--nm-bg-hover);
   color: var(--nm-accent);
-  text-shadow: 0 0 6px rgba(255, 21, 21, 0.4);
+  text-shadow: 0 0 8px rgba(255, 21, 21, 0.5);
 }
 
 #nm-nav-bar button:disabled { opacity: 0.2; cursor: default; }
@@ -206,6 +227,17 @@ html, body {
   font-size: var(--nm-text-xs);
   color: var(--nm-text-muted);
   font-family: var(--nm-font-mono);
+  position: relative;
+}
+
+/* Red glow line above status bar */
+#nm-status-bar::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 15%; right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #880000, transparent);
+  box-shadow: 0 0 4px rgba(255, 21, 21, 0.2);
 }
 
 #nm-status-bar #nm-status-zone {

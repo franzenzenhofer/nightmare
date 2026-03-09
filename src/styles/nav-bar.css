@@ -17,7 +17,13 @@
 
 .nm-zone-dot.zone-web {
   background: var(--nm-zone-web-fg);
-  box-shadow: 0 0 6px var(--nm-zone-web-fg), 0 0 12px rgba(255, 21, 21, 0.5);
+  box-shadow: 0 0 8px var(--nm-zone-web-fg), 0 0 16px rgba(255, 21, 21, 0.5);
+  animation: zonePulse 2s ease-in-out infinite;
+}
+
+@keyframes zonePulse {
+  0%, 100% { box-shadow: 0 0 6px var(--nm-zone-web-fg); }
+  50% { box-shadow: 0 0 12px var(--nm-zone-web-fg), 0 0 20px rgba(255, 21, 21, 0.4); }
 }
 
 .nm-url-bar.zone-local {
@@ -33,6 +39,7 @@
 .nm-url-bar.zone-web {
   border-color: var(--nm-zone-web-border);
   background: var(--nm-zone-web-bg);
+  box-shadow: 0 0 8px rgba(255, 21, 21, 0.15);
 }
 
 .nm-url-host {
