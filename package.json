@@ -2,8 +2,28 @@
   "name": "nightmare-browser",
   "version": "0.1.0",
   "description": "AI-first web browser on NW.js — zero CORS, full Node.js, API-steerable, MCP-enabled",
-  "private": true,
   "type": "module",
+  "license": "MIT",
+  "author": "Franz Enzenhofer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/franzenzenhofer/nightmare.git"
+  },
+  "homepage": "https://github.com/franzenzenhofer/nightmare",
+  "bugs": "https://github.com/franzenzenhofer/nightmare/issues",
+  "keywords": [
+    "browser",
+    "ai",
+    "mcp",
+    "nwjs",
+    "automation",
+    "web-scraping",
+    "nodejs",
+    "zero-cors",
+    "headless",
+    "ai-agent",
+    "developer-tools"
+  ],
   "scripts": {
     "predev": "node scripts/patch-nwjs.js && npm run build:browser-runtime",
     "dev": "nw src/ --devtools",

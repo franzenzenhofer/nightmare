@@ -1,7 +1,37 @@
+# Dependencies
 node_modules/
+
+# Build outputs
 dist/
 src/browser/dist/
 build/
 coverage/
+
+# Environment / Secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.netrc
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+tmp/
+temp/
 *.tgz
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -12,6 +12,7 @@ export default defineConfig({
         'src/**/route-defs-*.ts',
         'src/**/handlers-*.ts',
         'src/**/tools-extended*.ts',
+        'src/browser/runtime/**',
       ],
       thresholds: {
         lines: 95,
