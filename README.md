@@ -2,6 +2,12 @@
 
 ![Nightmare Browser — Hacker News loaded with red security banner](screenshots/hero.png)
 
+![Nightmare home page with system reconnaissance](screenshots/home.png)
+
+![Multiple tabs with real-time telemetry dashboard](screenshots/multi-tabs.png)
+
+![Dreamwalker control panel with tab management](screenshots/dreamwalker.png)
+
 [![CI](https://github.com/franzenzenhofer/nightmare/actions/workflows/ci.yml/badge.svg)](https://github.com/franzenzenhofer/nightmare/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-v25-green?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -147,22 +153,6 @@ Those tools automate a browser **from the outside**. Nightmare gives you a brows
 **Teaching** — Show students what actually happens in a browser. No abstraction layers. `require('http').createServer()` works. The filesystem is accessible. The browser is transparent.
 
 **Rapid Prototyping** — Build a full-stack app in a single HTML file. Frontend rendering + backend logic in one page. `fs`, `http`, `child_process`, `crypto` — all available in the browser tab.
-
----
-
-## Screenshots
-
-### Home Page
-
-![Nightmare home page with system reconnaissance](screenshots/home.png)
-
-### Multi-Tab Browsing with Live Telemetry
-
-![Multiple tabs with real-time telemetry dashboard](screenshots/multi-tabs.png)
-
-### Dreamwalker — Built-in Control Panel
-
-![Dreamwalker control panel with tab management](screenshots/dreamwalker.png)
 
 ---
 
