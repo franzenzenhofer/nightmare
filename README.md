@@ -3,6 +3,13 @@
 ![Nightmare Browser — Hacker News loaded with red security banner](screenshots/hero.png)
 
 [![CI](https://github.com/franzenzenhofer/nightmare/actions/workflows/ci.yml/badge.svg)](https://github.com/franzenzenhofer/nightmare/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-v25-green?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![NW.js](https://img.shields.io/badge/NW.js-0.109.0-orange)](https://nwjs.io/)
+[![Tests](https://img.shields.io/badge/tests-1635_passing-brightgreen)](https://github.com/franzenzenhofer/nightmare/actions)
+[![Coverage](https://img.shields.io/badge/coverage-98.6%25-brightgreen)](https://github.com/franzenzenhofer/nightmare/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP](https://img.shields.io/badge/MCP-enabled-purple)](https://modelcontextprotocol.io/)
 
 **Chrome without the safety rails.** An AI-first web browser with full Node.js in every tab, zero CORS, and a built-in REST API. Designed from the ground up to be controlled by AI agents.
 
