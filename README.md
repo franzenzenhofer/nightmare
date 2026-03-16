@@ -1,10 +1,10 @@
 # Nightmare Browser
 
+![Nightmare Browser — Hacker News loaded with red security banner](screenshots/hero.png)
+
 [![CI](https://github.com/franzenzenhofer/nightmare/actions/workflows/ci.yml/badge.svg)](https://github.com/franzenzenhofer/nightmare/actions/workflows/ci.yml)
 
 **Chrome without the safety rails.** An AI-first web browser with full Node.js in every tab, zero CORS, and a built-in REST API. Designed from the ground up to be controlled by AI agents.
-
-![Nightmare Browser — Hacker News loaded with red security banner](screenshots/hero.png)
 
 ---
 
